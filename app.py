@@ -1,70 +1,146 @@
+# Complete Streamlit App for Nifty 50 Stock Analysis
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import ta
 
-st.set_page_config(page_title="Stock Analysis App", layout="wide")
+# List of NIFTY 50 companies and tickers
+nifty50_stocks = {
+    'Adani Enterprises': 'ADANIENT.NS',
+    'Adani Ports': 'ADANIPORTS.NS',
+    'Apollo Hospitals': 'APOLLOHOSP.NS',
+    'Asian Paints': 'ASIANPAINT.NS',
+    'Axis Bank': 'AXISBANK.NS',
+    'Bajaj Auto': 'BAJAJ-AUTO.NS',
+    'Bajaj Finance': 'BAJFINANCE.NS',
+    'Bajaj Finserv': 'BAJAJFINSV.NS',
+    'Bharti Airtel': 'BHARTIARTL.NS',
+    'BPCL': 'BPCL.NS',
+    'Britannia Industries': 'BRITANNIA.NS',
+    'Cipla': 'CIPLA.NS',
+    'Coal India': 'COALINDIA.NS',
+    'Divi's Labs': 'DIVISLAB.NS',
+    'Dr. Reddy's': 'DRREDDY.NS',
+    'Eicher Motors': 'EICHERMOT.NS',
+    'Grasim Industries': 'GRASIM.NS',
+    'HCL Technologies': 'HCLTECH.NS',
+    'HDFC Bank': 'HDFCBANK.NS',
+    'HDFC Life': 'HDFCLIFE.NS',
+    'Hero MotoCorp': 'HEROMOTOCO.NS',
+    'Hindalco': 'HINDALCO.NS',
+    'Hindustan Unilever': 'HINDUNILVR.NS',
+    'ICICI Bank': 'ICICIBANK.NS',
+    'ITC': 'ITC.NS',
+    'Infosys': 'INFY.NS',
+    'JSW Steel': 'JSWSTEEL.NS',
+    'Kotak Mahindra Bank': 'KOTAKBANK.NS',
+    'L&T': 'LT.NS',
+    'LTIMindtree': 'LTIM.NS',
+    'Mahindra & Mahindra': 'M&M.NS',
+    'Maruti Suzuki': 'MARUTI.NS',
+    'Nestle India': 'NESTLEIND.NS',
+    'NTPC': 'NTPC.NS',
+    'ONGC': 'ONGC.NS',
+    'Power Grid': 'POWERGRID.NS',
+    'Reliance Industries': 'RELIANCE.NS',
+    'SBI': 'SBIN.NS',
+    'SBI Life': 'SBILIFE.NS',
+    'Sun Pharma': 'SUNPHARMA.NS',
+    'Tata Consumer': 'TATACONSUM.NS',
+    'Tata Motors': 'TATAMOTORS.NS',
+    'Tata Steel': 'TATASTEEL.NS',
+    'TCS': 'TCS.NS',
+    'Tech Mahindra': 'TECHM.NS',
+    'Titan Company': 'TITAN.NS',
+    'UPL': 'UPL.NS',
+    'Ultratech Cement': 'ULTRACEMCO.NS',
+    'Wipro': 'WIPRO.NS'
 
-st.title("📊 Interactive Stock Analysis App")
-st.markdown("Enter an Indian stock ticker (e.g., `TCS.NS`, `INFY.NS`, `RELIANCE.NS`) to view historical analysis and compare with NIFTY 50.")
+}
+st.set_page_config(layout="wide")
+st.title("📊 NIFTY 50 Stock Analysis Dashboard")
 
-# User Inputs
-ticker = st.text_input("Enter Stock Ticker:", "TCS.NS")
-start_date = st.date_input("Start Date", pd.to_datetime("2023-01-01"))
-end_date = st.date_input("End Date", pd.to_datetime("today"))
+# Dropdown for NIFTY 50 Stocks
+selected_stock = st.selectbox("Choose a Stock:", sorted(nifty50_stocks.keys()))
+ticker = nifty50_stocks[selected_stock]
 
-if ticker:
-    try:
-        stock = yf.Ticker(ticker)
-        df = stock.history(start=start_date, end=end_date)
+# Fetch data
+data = yf.download(ticker, period="1y")
+stock = yf.Ticker(ticker)
+info = stock.info
 
-        if df.empty:
-            st.warning("No data found. Please check the ticker symbol.")
-        else:
-            st.subheader(f"📈 Price Chart: {ticker}")
-            st.line_chart(df[['Open', 'High', 'Low', 'Close']])
+st.subheader(f"📈 {selected_stock} - Candlestick Chart")
+fig = go.Figure(data=[
+    go.Candlestick(x=data.index,
+                   open=data['Open'], high=data['High'],
+                   low=data['Low'], close=data['Close'])
+])
+fig.update_layout(xaxis_rangeslider_visible=False, height=400)
+st.plotly_chart(fig, use_container_width=True)
 
-            # Moving Averages
-            df['SMA50'] = df['Close'].rolling(window=50).mean()
-            df['SMA200'] = df['Close'].rolling(window=200).mean()
+# Tabs for analysis
+fundamental_tab, technical_tab, prediction_tab = st.tabs(["📊 Fundamental Analysis", "📈 Technical Analysis", "🔮 Prediction"])
 
-            st.subheader("📉 Moving Averages")
-            st.line_chart(df[['Close', 'SMA50', 'SMA200']])
+with fundamental_tab:
+    st.markdown("### 🧮 Key Fundamental Ratios")
+    roe = info.get('returnOnEquity', None)
+    de = info.get('debtToEquity', None)
+    eps = info.get('trailingEps', None)
+    pe = info.get('trailingPE', None)
 
-            # Fundamental Ratios
-            st.subheader("📊 Fundamental Ratios")
-            info = stock.info
-            roe = info.get('returnOnEquity', None)
-            de = info.get('debtToEquity', None)
-            eps = info.get('trailingEps', None)
-            pe = info.get('trailingPE', None)
+    st.metric("Return on Equity (ROE)", f"{roe*100:.2f}%" if roe else "N/A")
+    st.markdown("ROE = [(Net Income – Preference Dividend) / Avg Shareholders’ Equity] × 100")
+    st.markdown("A high, consistent, and rising ROE indicates strong operational efficiency.")
 
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Return on Equity (ROE)", f"{roe:.2%}" if roe else "N/A")
-                st.metric("Debt-to-Equity Ratio", f"{de:.2f}" if de else "N/A")
-            with col2:
-                st.metric("Earnings Per Share (EPS)", f"{eps:.2f}" if eps else "N/A")
-                st.metric("Price-to-Earnings Ratio (P/E)", f"{pe:.2f}" if pe else "N/A")
+    st.metric("Debt-to-Equity Ratio (D/E)", f"{de:.2f}" if de else "N/A")
+    st.markdown("D/E = Total Debt / Total Equity")
+    st.markdown("A lower and steadily declining D/E ratio suggests financial stability.")
 
-            # Compare with Nifty 50
-            st.subheader("📊 Stock vs NIFTY 50 Cumulative Returns")
-            index = yf.Ticker("^NSEI")
-            df_index = index.history(start=start_date, end=end_date)
+    st.metric("Earnings Per Share (EPS)", f"₹{eps:.2f}" if eps else "N/A")
+    st.markdown("EPS = (Net Income – Preference Dividend) / Avg Shares")
 
-            df['Returns'] = df['Close'].pct_change()
-            df_index['Returns'] = df_index['Close'].pct_change()
+    st.metric("Price-to-Earnings Ratio (P/E)", f"{pe:.2f}" if pe else "N/A")
+    st.markdown("P/E = Current Price / EPS")
+    st.markdown("Lower P/E may indicate undervaluation, but sector context matters.")
 
-            df['Cumulative'] = (1 + df['Returns']).cumprod()
-            df_index['Cumulative'] = (1 + df_index['Returns']).cumprod()
+with technical_tab:
+    st.markdown("### 📉 Technical Indicators")
 
-            comp_df = pd.DataFrame({
-                ticker: df['Cumulative'],
-                'NIFTY 50': df_index['Cumulative']
-            }).dropna()
+    # Moving Averages
+    data['SMA50'] = data['Close'].rolling(window=50).mean()
+    data['SMA200'] = data['Close'].rolling(window=200).mean()
+    st.line_chart(data[['Close', 'SMA50', 'SMA200']])
 
-            st.line_chart(comp_df)
+    # RSI
+    rsi = ta.momentum.RSIIndicator(data['Close'], window=14)
+    data['RSI'] = rsi.rsi()
+    st.line_chart(data[['RSI']])
+    st.markdown("RSI above 70 = Overbought, below 30 = Oversold")
 
-    except Exception as e:
-        st.error(f"Error fetching data: {e}")
+    # Support and Resistance (basic version using rolling min/max)
+    data['Support'] = data['Low'].rolling(window=20).min()
+    data['Resistance'] = data['High'].rolling(window=20).max()
+    st.line_chart(data[['Close', 'Support', 'Resistance']])
+    
+    # Volume
+    st.bar_chart(data['Volume'])
+
+with prediction_tab:
+    st.markdown("### 🔮 Simple Price Prediction (Linear Trend)")
+    from sklearn.linear_model import LinearRegression
+    import numpy as np
+
+    data = data.dropna()
+    data['Date'] = data.index
+    data['Date_ordinal'] = pd.to_datetime(data['Date']).map(pd.Timestamp.toordinal)
+
+    X = data['Date_ordinal'].values.reshape(-1,1)
+    y = data['Close'].values.reshape(-1,1)
+
+    model = LinearRegression().fit(X, y)
+    y_pred = model.predict(X)
+
+    st.line_chart(pd.DataFrame({'Actual': y.flatten(), 'Predicted': y_pred.flatten()}, index=data.index))
+    st.markdown("This is a basic linear prediction. For more accuracy, consider ARIMA, LSTM, or Prophet.")
 
