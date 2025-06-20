@@ -78,16 +78,25 @@ if data.empty:
     st.error("⚠️ No historical data found for this ticker.")
     st.stop()
 
+st.write("📊 Sample Data", data.tail())  # Debug sample
+
 stock = yf.Ticker(ticker)
 info = stock.info
 
-st.subheader(f"📈 {selected_stock} - Candlestick Chart")
-fig = go.Figure(data=[
-    go.Candlestick(x=data.index, open=data['Open'], high=data['High'],
-                   low=data['Low'], close=data['Close'])
-])
-fig.update_layout(xaxis_rangeslider_visible=False, height=400)
-st.plotly_chart(fig, use_container_width=True)
+candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
+if candlestick_data.empty:
+    st.warning("⚠️ No valid candlestick data to display.")
+else:
+    st.subheader(f"📈 {selected_stock} - Candlestick Chart")
+    fig = go.Figure(data=[
+        go.Candlestick(x=candlestick_data.index,
+                       open=candlestick_data['Open'],
+                       high=candlestick_data['High'],
+                       low=candlestick_data['Low'],
+                       close=candlestick_data['Close'])
+    ])
+    fig.update_layout(xaxis_rangeslider_visible=False, height=400)
+    st.plotly_chart(fig, use_container_width=True)
 
 # Tabs
 fundamental_tab, technical_tab, prediction_tab = st.tabs(["📊 Fundamental Analysis", "📈 Technical Analysis", "🔮 Prediction"])
@@ -144,6 +153,7 @@ with prediction_tab:
 
     st.line_chart(pd.DataFrame({'Actual': y.flatten(), 'Predicted': y_pred.flatten()}, index=data.index))
     st.markdown("This is a basic linear prediction. For more accuracy, consider ARIMA, LSTM, or Prophet.")
+
 
 
 
