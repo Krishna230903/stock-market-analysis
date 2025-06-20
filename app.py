@@ -169,5 +169,14 @@ with technical_tab:
     st.line_chart(data[['Close', 'Support', 'Resistance']])
 
     st.markdown("### Volume Analysis")
-    st.bar_chart(data['Volume'])
+    data['Volume_Type'] = np.where(data['Close'] > data['Open'], 'Buy', 'Sell')
+    buy_volume = data[data['Volume_Type'] == 'Buy']['Volume']
+    sell_volume = data[data['Volume_Type'] == 'Sell']['Volume']
+
+    fig_vol = go.Figure()
+    fig_vol.add_trace(go.Bar(x=buy_volume.index, y=buy_volume, name='Buy Volume', marker_color='green'))
+    fig_vol.add_trace(go.Bar(x=sell_volume.index, y=sell_volume, name='Sell Volume', marker_color='red'))
+
+    fig_vol.update_layout(title='Buy vs Sell Volume', barmode='stack', xaxis_title='Date', yaxis_title='Volume')
+    st.plotly_chart(fig_vol, use_container_width=True)
 
