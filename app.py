@@ -84,13 +84,14 @@ if data.empty:
 
 if isinstance(data.columns, pd.MultiIndex):
     data.columns = data.columns.get_level_values(0)
-
+    
+       st.write("📊 Sample Data", data.tail()) 
     # Replace Sample Data section with Stock Information Summary
-    st.markdown("### ℹ️ Stock Summary")
-    st.write(f"**Sector:** {info.get('sector', 'N/A')}")
-    st.write(f"**Market Cap:** ₹{info.get('marketCap', 0) / 1e7:.2f} Cr")
-    st.write(f"**52 Week High:** ₹{info.get('fiftyTwoWeekHigh', 'N/A')}")
-    st.write(f"**52 Week Low:** ₹{info.get('fiftyTwoWeekLow', 'N/A')}")
+       st.markdown("### ℹ️ Stock Summary")
+       st.write(f"**Sector:** {info.get('sector', 'N/A')}")
+       st.write(f"**Market Cap:** ₹{info.get('marketCap', 0) / 1e7:.2f} Cr")
+       st.write(f"**52 Week High:** ₹{info.get('fiftyTwoWeekHigh', 'N/A')}")
+       st.write(f"**52 Week Low:** ₹{info.get('fiftyTwoWeekLow', 'N/A')}")
     
 stock = yf.Ticker(ticker)
 info = stock.info
