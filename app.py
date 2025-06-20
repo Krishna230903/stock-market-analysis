@@ -168,7 +168,7 @@ with technical_tab:
     data['Resistance'] = data['High'].rolling(window=20).max()
     st.line_chart(data[['Close', 'Support', 'Resistance']])
 
-     st.markdown("### Volume Analysis")
+    st.markdown("### Volume Analysis")
     data['Volume_Type'] = np.where(data['Close'] > data['Open'], 'Buy', 'Sell')
     buy_volume = data[data['Volume_Type'] == 'Buy']['Volume']
     sell_volume = data[data['Volume_Type'] == 'Sell']['Volume']
