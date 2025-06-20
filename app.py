@@ -163,10 +163,6 @@ with technical_tab:
     elif rsi_value < 30:
         st.success("✅ RSI Alert: Stock is Oversold!")
 
-    st.markdown("### Support and Resistance Levels")
-    data['Support'] = data['Low'].rolling(window=20).min()
-    data['Resistance'] = data['High'].rolling(window=20).max()
-    st.line_chart(data[['Close', 'Support', 'Resistance']])
 
     st.markdown("### Volume Analysis")
     data['Volume_Type'] = np.where(data['Close'] > data['Open'], 'Buy', 'Sell')
