@@ -168,7 +168,7 @@ with technical_tab:
     data['Resistance'] = data['High'].rolling(window=20).max()
     st.line_chart(data[['Close', 'Support', 'Resistance']])
 
-    st.markdown("### Volume Analysis")
+     st.markdown("### Volume Analysis")
     data['Volume_Type'] = np.where(data['Close'] > data['Open'], 'Buy', 'Sell')
     buy_volume = data[data['Volume_Type'] == 'Buy']['Volume']
     sell_volume = data[data['Volume_Type'] == 'Sell']['Volume']
@@ -180,3 +180,40 @@ with technical_tab:
     fig_vol.update_layout(title='Buy vs Sell Volume', barmode='stack', xaxis_title='Date', yaxis_title='Volume')
     st.plotly_chart(fig_vol, use_container_width=True)
 
+    # Replace Sample Data section with Stock Information Summary
+    st.markdown("### ℹ️ Stock Summary")
+    st.write(f"**Sector:** {info.get('sector', 'N/A')}")
+    st.write(f"**Market Cap:** ₹{info.get('marketCap', 0) / 1e7:.2f} Cr")
+    st.write(f"**52 Week High:** ₹{info.get('fiftyTwoWeekHigh', 'N/A')}")
+    st.write(f"**52 Week Low:** ₹{info.get('fiftyTwoWeekLow', 'N/A')}")
+
+    # Trend Pattern Analysis
+    st.markdown("### 🔍 Trend Pattern Analysis")
+    close_prices = data['Close']
+    if close_prices.isnull().any() or close_prices.empty:
+        st.warning("Insufficient data for pattern analysis.")
+    else:
+        # Simple example logic for demonstration
+        trend_comment = ""
+        annotations = []
+        if close_prices.iloc[-1] > close_prices.mean():
+            trend_comment = "The stock is currently trading **above average**, indicating a potential bullish trend."
+            annotations.append(dict(x=close_prices.index[-1], y=close_prices.iloc[-1],
+                                    xref='x', yref='y', text='Above Avg → Bullish',
+                                    showarrow=True, arrowhead=1, ax=-40, ay=-40))
+        elif close_prices.iloc[-1] < close_prices.mean():
+            trend_comment = "The stock is trading **below average**, possibly indicating a bearish outlook."
+            annotations.append(dict(x=close_prices.index[-1], y=close_prices.iloc[-1],
+                                    xref='x', yref='y', text='Below Avg → Bearish',
+                                    showarrow=True, arrowhead=1, ax=-40, ay=40))
+        else:
+            trend_comment = "The stock is trading around its average. No strong trend observed."
+
+        fig_trend = go.Figure()
+        fig_trend.add_trace(go.Scatter(x=close_prices.index, y=close_prices, mode='lines', name='Close Price'))
+        fig_trend.add_trace(go.Scatter(x=close_prices.index, y=[close_prices.mean()]*len(close_prices),
+                                       mode='lines', name='Average Price', line=dict(dash='dash')))
+        fig_trend.update_layout(title="Trend Visualization", annotations=annotations)
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+        st.info(trend_comment)
