@@ -21,7 +21,7 @@ nifty50_stocks = {
     'Cipla': 'CIPLA.NS',
     'Coal India': 'COALINDIA.NS',
     "Divi's Labs": 'DIVISLAB.NS',
-    'Dr. Reddy's': 'DRREDDY.NS',
+    'Dr. Reddy\'s': 'DRREDDY.NS',
     'Eicher Motors': 'EICHERMOT.NS',
     'Grasim Industries': 'GRASIM.NS',
     'HCL Technologies': 'HCLTECH.NS',
