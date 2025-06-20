@@ -78,6 +78,10 @@ if data.empty:
     st.error("⚠️ No historical data found for this ticker.")
     st.stop()
 
+# Handle MultiIndex from yfinance if present
+if isinstance(data.columns, pd.MultiIndex):
+    data.columns = data.columns.get_level_values(0)
+
 st.write("📊 Sample Data", data.tail())  # Debug sample
 
 stock = yf.Ticker(ticker)
@@ -153,8 +157,5 @@ with prediction_tab:
 
     st.line_chart(pd.DataFrame({'Actual': y.flatten(), 'Predicted': y_pred.flatten()}, index=data.index))
     st.markdown("This is a basic linear prediction. For more accuracy, consider ARIMA, LSTM, or Prophet.")
-
-
-
 
 
