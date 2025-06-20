@@ -4,8 +4,8 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 import ta
-from sklearn.linear_model import LinearRegression
 import numpy as np
+from io import BytesIO
 
 # List of NIFTY 50 companies and tickers
 nifty50_stocks = {
@@ -66,10 +66,14 @@ st.title("📊 NIFTY 50 Stock Analysis Dashboard")
 selected_stock = st.selectbox("Choose a Stock:", sorted(nifty50_stocks.keys()))
 ticker = nifty50_stocks[selected_stock]
 
+# Date range input
+start_date = st.date_input("Select start date", pd.to_datetime("2023-01-01"))
+end_date = st.date_input("Select end date", pd.to_datetime("today"))
+
 # Fetch data safely
 with st.spinner("📡 Fetching data..."):
     try:
-        data = yf.download(ticker, period="1y")
+        data = yf.download(ticker, start=start_date, end=end_date)
     except Exception as e:
         st.error(f"⚠️ Error fetching data: {e}")
         st.stop()
@@ -78,11 +82,10 @@ if data.empty:
     st.error("⚠️ No historical data found for this ticker.")
     st.stop()
 
-# Handle MultiIndex from yfinance if present
 if isinstance(data.columns, pd.MultiIndex):
     data.columns = data.columns.get_level_values(0)
 
-st.write("📊 Sample Data", data.tail())  # Debug sample
+st.write("📊 Sample Data", data.tail())
 
 stock = yf.Ticker(ticker)
 info = stock.info
@@ -103,7 +106,7 @@ else:
     st.plotly_chart(fig, use_container_width=True)
 
 # Tabs
-fundamental_tab, technical_tab, prediction_tab = st.tabs(["📊 Fundamental Analysis", "📈 Technical Analysis", "🔮 Prediction"])
+fundamental_tab, technical_tab = st.tabs(["📊 Fundamental Analysis", "📈 Technical Analysis"])
 
 with fundamental_tab:
     st.markdown("### 🧮 Key Fundamental Ratios")
@@ -112,50 +115,59 @@ with fundamental_tab:
     eps = info.get('trailingEps', None)
     pe = info.get('trailingPE', None)
 
-    st.metric("Return on Equity (ROE)", f"{roe*100:.2f}%" if roe else "N/A")
-    st.markdown("ROE = [(Net Income – Preference Dividend) / Avg Shareholders’ Equity] × 100")
-    st.markdown("A high, consistent, and rising ROE indicates strong operational efficiency.")
+    roe_display = f"{roe*100:.2f}%" if roe else "N/A"
+    de_display = f"{de:.2f}" if de else "N/A"
+    pe_display = f"{pe:.2f}" if pe else "N/A"
 
-    st.metric("Debt-to-Equity Ratio (D/E)", f"{de:.2f}" if de else "N/A")
-    st.markdown("D/E = Total Debt / Total Equity")
-    st.markdown("A lower and steadily declining D/E ratio suggests financial stability.")
-
+    st.metric("Return on Equity (ROE)", roe_display)
+    st.metric("Debt-to-Equity Ratio (D/E)", de_display)
     st.metric("Earnings Per Share (EPS)", f"₹{eps:.2f}" if eps else "N/A")
-    st.markdown("EPS = (Net Income – Preference Dividend) / Avg Shares")
+    st.metric("Price-to-Earnings Ratio (P/E)", pe_display)
 
-    st.metric("Price-to-Earnings Ratio (P/E)", f"{pe:.2f}" if pe else "N/A")
-    st.markdown("P/E = Current Price / EPS")
-    st.markdown("Lower P/E may indicate undervaluation, but sector context matters.")
+    st.markdown("### ⚠️ Risk Assessment")
+    if roe and roe < 0.10 or (de and de > 2.0):
+        risk = "High"
+    elif roe and roe > 0.20 and (de and de < 0.5):
+        risk = "Low"
+    else:
+        risk = "Medium"
+    st.metric("Risk Factor", risk)
+
+    st.markdown("### 💡 Investment Suggestion")
+    if risk == "Low" and pe and pe < 25:
+        suggestion = "Buy Call"
+    elif risk == "High" or (pe and pe > 40):
+        suggestion = "Sell Call"
+    else:
+        suggestion = "Hold"
+    st.metric("Overall Recommendation", suggestion)
+
+    st.download_button("⬇️ Export Data to CSV", data.to_csv().encode(), file_name=f"{ticker}_data.csv", mime="text/csv")
 
 with technical_tab:
-    st.markdown("### 📉 Technical Indicators")
+    st.markdown("### Moving Averages")
     data['SMA50'] = data['Close'].rolling(window=50).mean()
     data['SMA200'] = data['Close'].rolling(window=200).mean()
     st.line_chart(data[['Close', 'SMA50', 'SMA200']])
 
+    st.markdown("### Relative Strength Index (RSI)")
     rsi = ta.momentum.RSIIndicator(data['Close'], window=14)
     data['RSI'] = rsi.rsi()
     st.line_chart(data[['RSI']])
-    st.markdown("RSI above 70 = Overbought, below 30 = Oversold")
+    rsi_value = data['RSI'].iloc[-1]
+    trend = "Overbought" if rsi_value > 70 else ("Oversold" if rsi_value < 30 else "Neutral")
+    st.metric("Current RSI Trend", trend)
 
+    if rsi_value > 70:
+        st.warning("⚠️ RSI Alert: Stock is Overbought!")
+    elif rsi_value < 30:
+        st.success("✅ RSI Alert: Stock is Oversold!")
+
+    st.markdown("### Support and Resistance Levels")
     data['Support'] = data['Low'].rolling(window=20).min()
     data['Resistance'] = data['High'].rolling(window=20).max()
     st.line_chart(data[['Close', 'Support', 'Resistance']])
 
+    st.markdown("### Volume Analysis")
     st.bar_chart(data['Volume'])
-
-with prediction_tab:
-    st.markdown("### 🔮 Simple Price Prediction (Linear Trend)")
-    data = data.dropna()
-    data['Date'] = data.index
-    data['Date_ordinal'] = pd.to_datetime(data['Date']).map(pd.Timestamp.toordinal)
-    X = data['Date_ordinal'].values.reshape(-1,1)
-    y = data['Close'].values.reshape(-1,1)
-
-    model = LinearRegression().fit(X, y)
-    y_pred = model.predict(X)
-
-    st.line_chart(pd.DataFrame({'Actual': y.flatten(), 'Predicted': y_pred.flatten()}, index=data.index))
-    st.markdown("This is a basic linear prediction. For more accuracy, consider ARIMA, LSTM, or Prophet.")
-
 
