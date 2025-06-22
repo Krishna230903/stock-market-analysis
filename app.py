@@ -1,4 +1,3 @@
-# 📈 Nifty 50 Stock Market Analyzer with Tabs
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -7,7 +6,7 @@ import ta
 import numpy as np
 from scipy.signal import argrelextrema
 
-# 📌 NIFTY 50 stock ticker map
+# --- NIFTY 50 ticker list ---
 nifty50_stocks = {
     "Adani Enterprises": "ADANIENT.NS", "Adani Ports": "ADANIPORTS.NS", "Apollo Hospitals": "APOLLOHOSP.NS",
     "Asian Paints": "ASIANPAINT.NS", "Axis Bank": "AXISBANK.NS", "Bajaj Auto": "BAJAJ-AUTO.NS",
@@ -27,7 +26,7 @@ nifty50_stocks = {
     "Wipro": "WIPRO.NS"
 }
 
-# UI layout
+# --- UI ---
 st.title("📈 Nifty 50 Stock Market Analyzer")
 
 col1, col2 = st.columns(2)
@@ -39,86 +38,84 @@ with col2:
 
 ticker = nifty50_stocks[selected_stock]
 
-# Fetch historical stock data
-data = yf.download(ticker, start=start_date, end=end_date)
-info = yf.Ticker(ticker).info
+# --- Cached data fetch function ---
+@st.cache_data(ttl=3600)
+def fetch_data(ticker, start_date, end_date):
+    try:
+        data = yf.download(ticker, start=start_date, end=end_date)
+        if data.empty:
+            return None
+        data.index = pd.to_datetime(data.index)
+        data.sort_index(inplace=True)
+        data.dropna(inplace=True)
+        return data
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
+        return None
 
-if data.empty:
-    st.error("No data found for this stock in the selected range.")
+# --- Fetch data safely ---
+with st.spinner("📡 Fetching data..."):
+    data = fetch_data(ticker, start_date, end_date)
+    info = yf.Ticker(ticker).info if data is not None else {}
+
+if data is None or data.empty:
+    st.error("⚠️ No historical data found for this ticker.")
     st.stop()
 
-data = data.dropna()
+# Flatten multilevel column if needed
+if isinstance(data.columns, pd.MultiIndex):
+    data.columns = data.columns.get_level_values(0)
 
-# Show recent sample
 st.write("📊 Sample Data", data.tail())
 
-# Candlestick chart
-st.subheader(f"📈 {ticker} - Candlestick Chart")
+# --- Candlestick Chart ---
 candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
-fig = go.Figure(data=[
-    go.Candlestick(
-        x=candlestick_data.index,
-        open=candlestick_data['Open'],
-        high=candlestick_data['High'],
-        low=candlestick_data['Low'],
-        close=candlestick_data['Close']
-    )
-])
-fig.update_layout(xaxis_rangeslider_visible=False, height=400)
-st.plotly_chart(fig, use_container_width=True)
+if candlestick_data.empty:
+    st.warning("⚠️ No valid candlestick data to display.")
+else:
+    st.subheader(f"📈 {ticker} - Candlestick Chart")
+    fig = go.Figure(data=[
+        go.Candlestick(x=candlestick_data.index,
+                       open=candlestick_data['Open'],
+                       high=candlestick_data['High'],
+                       low=candlestick_data['Low'],
+                       close=candlestick_data['Close'])
+    ])
+    fig.update_layout(xaxis_rangeslider_visible=False, height=400)
+    st.plotly_chart(fig, use_container_width=True)
 
-# 📌 TABS: Fundamental | Technical | Pattern
+# --- TABS ---
 tab1, tab2, tab3 = st.tabs(["📊 Fundamental Analysis", "📉 Technical Analysis", "📈 Pattern Recognition"])
 
-# TAB 1: Fundamental
+# --- Tab 1: Fundamental Analysis ---
 with tab1:
     st.subheader("📊 Fundamental Analysis")
+
     try:
-        net_income = info.get("netIncome", None)
-        equity = info.get("totalStockholderEquity", None)
-        total_debt = info.get("totalDebt", None)
-        eps = info.get("trailingEps", None)
-        price = info.get("currentPrice", None)
+        net_income = info.get("netIncome")
+        equity = info.get("totalStockholderEquity")
+        total_debt = info.get("totalDebt")
+        eps = info.get("trailingEps")
+        price = info.get("currentPrice")
 
         roe = (net_income / equity * 100) if net_income and equity else None
         de_ratio = (total_debt / equity) if total_debt and equity else None
         pe_ratio = (price / eps) if price and eps else None
 
-        if roe is not None:
-            st.write(f"**Return on Equity (ROE):** {roe:.2f}%")
-        else:
-            st.write("**Return on Equity (ROE):** Data not available")
+        st.write(f"**Return on Equity (ROE):** {roe:.2f}%" if roe else "ROE data not available.")
+        st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}" if de_ratio else "D/E data not available.")
+        st.write(f"**Earnings Per Share (EPS):** {eps:.2f}" if eps else "EPS data not available.")
+        st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}" if pe_ratio else "P/E data not available.")
 
         if de_ratio is not None:
-            st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
-        else:
-            st.write("**Debt-to-Equity Ratio (D/E):** Data not available")
-
-        if eps is not None:
-            st.write(f"**Earnings Per Share (EPS):** {eps:.2f}")
-        else:
-            st.write("**Earnings Per Share (EPS):** Data not available")
-
-        if pe_ratio is not None:
-            st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}")
-        else:
-            st.write("**Price-to-Earnings Ratio (P/E):** Data not available")
-
-        # Risk comment
-        if de_ratio is not None:
-            if de_ratio < 1:
-                risk = "Low Risk"
-            elif de_ratio < 2:
-                risk = "Medium Risk"
-            else:
-                risk = "High Risk"
+            risk = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
             st.success(f"📌 Risk Assessment: {risk}")
         else:
             st.info("Risk assessment not possible due to missing D/E data.")
     except Exception as e:
         st.warning(f"⚠️ Error loading fundamentals: {e}")
 
-# TAB 2: Technical
+# --- Tab 2: Technical Analysis ---
 with tab2:
     st.subheader("📉 Technical Analysis")
 
@@ -142,11 +139,11 @@ with tab2:
     fig_rsi.update_layout(title="📉 Relative Strength Index (RSI)", height=300)
     st.plotly_chart(fig_rsi, use_container_width=True)
 
-    st.success("📌 Comment: RSI above 70 = Overbought, below 30 = Oversold.")
+    st.success("📌 RSI > 70 = Overbought, RSI < 30 = Oversold")
 
-# TAB 3: Pattern Recognition
+# --- Tab 3: Pattern Recognition ---
 with tab3:
-    st.subheader("📈 Pattern Recognition (Basic Double Top)")
+    st.subheader("📈 Pattern Recognition (Double Top)")
 
     def detect_double_top(prices, window=5):
         max_idx = argrelextrema(prices.values, np.greater, order=window)[0]
@@ -163,4 +160,4 @@ with tab3:
     st.plotly_chart(fig_pattern, use_container_width=True)
 
     if not double_tops.empty:
-        st.warning("⚠️ Double Top pattern may indicate a reversal trend.")
+        st.warning("⚠️ Double Top pattern may indicate a trend reversal.")
