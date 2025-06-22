@@ -81,7 +81,12 @@ with tab2:
     st.subheader("📈 Technical Analysis")
     data['SMA50'] = data['Close'].rolling(window=50).mean()
     data['SMA200'] = data['Close'].rolling(window=200).mean()
-    data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
+   # Ensure close prices are clean and 1D
+close_prices = pd.Series(data['Close'].values, index=data.index).dropna()
+
+# Calculate RSI safely
+rsi_series = ta.momentum.RSIIndicator(close=close_prices, window=14).rsi()
+data['RSI'] = rsi_series
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='Close'))
