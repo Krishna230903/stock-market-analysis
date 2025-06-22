@@ -1,4 +1,4 @@
-# Complete Streamlit App for Nifty 50 Stock Analysis (Final Version)
+# Complete Streamlit App for Nifty 50 Stock Analysis (Final Version with Rate Limit Handling)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -8,6 +8,7 @@ import numpy as np
 from scipy.signal import argrelextrema
 from sklearn.linear_model import LinearRegression
 from io import BytesIO
+import time
 
 # List of NIFTY 50 companies and tickers
 nifty50_stocks = {
@@ -39,7 +40,25 @@ end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
 
 # Fetch data
 data = yf.download(ticker, start=start_date, end=end_date)
-info = yf.Ticker(ticker).info
+time.sleep(1.5)  # avoid rate limiting
+try:
+    ticker_obj = yf.Ticker(ticker)
+    info = ticker_obj.info
+except yf.YFRateLimitError:
+    st.warning("⚠️ Rate limit reached. Using fallback data.")
+    try:
+        info = ticker_obj.fast_info
+        info['sector'] = 'N/A'
+        info['marketCap'] = info.get('market_cap', 0)
+        info['fiftyTwoWeekHigh'] = info.get('year_high', 'N/A')
+        info['fiftyTwoWeekLow'] = info.get('year_low', 'N/A')
+    except Exception as e:
+        st.error(f"Failed to fetch stock info: {e}")
+        st.stop()
+except Exception as e:
+    st.error(f"⚠️ Error fetching stock info: {e}")
+    st.stop()
+
 if data.empty:
     st.error("No data found for this stock in selected range.")
     st.stop()
