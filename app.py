@@ -1,4 +1,4 @@
-# Complete Streamlit App for Nifty 50 Stock Analysis (Final Version with Tabs and Enhanced Patterns)
+# 📈 Nifty 50 Stock Market Analyzer with Tabs
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -7,7 +7,7 @@ import ta
 import numpy as np
 from scipy.signal import argrelextrema
 
-# List of NIFTY 50 companies and tickers
+# 📌 NIFTY 50 stock ticker map
 nifty50_stocks = {
     "Adani Enterprises": "ADANIENT.NS", "Adani Ports": "ADANIPORTS.NS", "Apollo Hospitals": "APOLLOHOSP.NS",
     "Asian Paints": "ASIANPAINT.NS", "Axis Bank": "AXISBANK.NS", "Bajaj Auto": "BAJAJ-AUTO.NS",
@@ -27,85 +27,126 @@ nifty50_stocks = {
     "Wipro": "WIPRO.NS"
 }
 
-st.set_page_config(page_title="Nifty 50 Analyzer", layout="wide")
+# UI layout
 st.title("📈 Nifty 50 Stock Market Analyzer")
 
-# ---------------------- Main Controls ---------------------- #
-st.sidebar.header("Choose a Stock and Date Range")
-selected_stock = st.sidebar.selectbox("Select a NIFTY 50 Stock:", sorted(nifty50_stocks.keys()))
+col1, col2 = st.columns(2)
+with col1:
+    selected_stock = st.selectbox("Select a NIFTY 50 Stock:", sorted(nifty50_stocks.keys()))
+with col2:
+    start_date = st.date_input("Start Date", pd.to_datetime("2022-01-01"))
+    end_date = st.date_input("End Date", pd.to_datetime("today"))
+
 ticker = nifty50_stocks[selected_stock]
-start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2022-01-01"))
-end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
 
-@st.cache_data
-def fetch_data(ticker, start, end):
-    return yf.download(ticker, start=start, end=end)
+# Fetch historical stock data
+data = yf.download(ticker, start=start_date, end=end_date)
+info = yf.Ticker(ticker).info
 
-with st.spinner("📡 Fetching data..."):
-    data = fetch_data(ticker, start_date, end_date)
-
-if data is None or data.empty:
-    st.error("⚠️ No historical data found for this ticker.")
+if data.empty:
+    st.error("No data found for this stock in the selected range.")
     st.stop()
 
-if isinstance(data.columns, pd.MultiIndex):
-    data.columns = data.columns.get_level_values(0)
+data = data.dropna()
 
-st.subheader("📊 Sample Data")
-st.dataframe(data.tail())
+# Show recent sample
+st.write("📊 Sample Data", data.tail())
 
-# ---------------------- Tabs ---------------------- #
-tabs = st.tabs(["📊 Fundamental Analysis", "📉 Technical Analysis", "🔍 Pattern Recognition"])
+# Candlestick chart
+st.subheader(f"📈 {ticker} - Candlestick Chart")
+candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
+fig = go.Figure(data=[
+    go.Candlestick(
+        x=candlestick_data.index,
+        open=candlestick_data['Open'],
+        high=candlestick_data['High'],
+        low=candlestick_data['Low'],
+        close=candlestick_data['Close']
+    )
+])
+fig.update_layout(xaxis_rangeslider_visible=False, height=400)
+st.plotly_chart(fig, use_container_width=True)
 
-# ---------------------- Fundamental Tab ---------------------- #
-with tabs[0]:
-    st.header("📊 Fundamental Analysis")
+# 📌 TABS: Fundamental | Technical | Pattern
+tab1, tab2, tab3 = st.tabs(["📊 Fundamental Analysis", "📉 Technical Analysis", "📈 Pattern Recognition"])
+
+# TAB 1: Fundamental
+with tab1:
+    st.subheader("📊 Fundamental Analysis")
     try:
-        info = yf.Ticker(ticker).info
-        roe = (info['netIncome'] / info['totalStockholderEquity']) * 100
-        de_ratio = info['totalDebt'] / info['totalStockholderEquity']
-        eps = info['trailingEps']
-        pe_ratio = info['currentPrice'] / eps
+        net_income = info.get("netIncome", None)
+        equity = info.get("totalStockholderEquity", None)
+        total_debt = info.get("totalDebt", None)
+        eps = info.get("trailingEps", None)
+        price = info.get("currentPrice", None)
 
-        st.write(f"**Return on Equity (ROE):** {roe:.2f}%")
-        st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
-        st.write(f"**Earnings Per Share (EPS):** {eps:.2f}")
-        st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}")
+        roe = (net_income / equity * 100) if net_income and equity else None
+        de_ratio = (total_debt / equity) if total_debt and equity else None
+        pe_ratio = (price / eps) if price and eps else None
 
-        risk_comment = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
-        st.success(f"📌 Risk Assessment: {risk_comment}")
-    except:
-        st.warning("⚠️ Not enough data for fundamental metrics.")
+        if roe is not None:
+            st.write(f"**Return on Equity (ROE):** {roe:.2f}%")
+        else:
+            st.write("**Return on Equity (ROE):** Data not available")
 
-    comment = st.text_area("📝 Analyst Comment/Notes:")
+        if de_ratio is not None:
+            st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
+        else:
+            st.write("**Debt-to-Equity Ratio (D/E):** Data not available")
 
-# ---------------------- Technical Tab ---------------------- #
-with tabs[1]:
-    st.header("📉 Technical Analysis")
+        if eps is not None:
+            st.write(f"**Earnings Per Share (EPS):** {eps:.2f}")
+        else:
+            st.write("**Earnings Per Share (EPS):** Data not available")
+
+        if pe_ratio is not None:
+            st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}")
+        else:
+            st.write("**Price-to-Earnings Ratio (P/E):** Data not available")
+
+        # Risk comment
+        if de_ratio is not None:
+            if de_ratio < 1:
+                risk = "Low Risk"
+            elif de_ratio < 2:
+                risk = "Medium Risk"
+            else:
+                risk = "High Risk"
+            st.success(f"📌 Risk Assessment: {risk}")
+        else:
+            st.info("Risk assessment not possible due to missing D/E data.")
+    except Exception as e:
+        st.warning(f"⚠️ Error loading fundamentals: {e}")
+
+# TAB 2: Technical
+with tab2:
+    st.subheader("📉 Technical Analysis")
+
     data['SMA20'] = data['Close'].rolling(window=20).mean()
     data['SMA50'] = data['Close'].rolling(window=50).mean()
 
     fig_ma = go.Figure()
-    fig_ma.add_trace(go.Scatter(x=data.index, y=data['Close'], name='Close'))
+    fig_ma.add_trace(go.Scatter(x=data.index, y=data['Close'], name='Close Price'))
     fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA20'], name='SMA 20', line=dict(color='blue')))
     fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA50'], name='SMA 50', line=dict(color='orange')))
-    fig_ma.update_layout(title='📊 Moving Averages', height=400)
+    fig_ma.update_layout(title='Moving Averages', height=400)
     st.plotly_chart(fig_ma, use_container_width=True)
 
-    st.subheader("📉 RSI (Relative Strength Index)")
+    st.subheader("📉 Relative Strength Index (RSI)")
     data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
+
     fig_rsi = go.Figure()
-    fig_rsi.add_trace(go.Scatter(x=data.index, y=data['RSI'], name='RSI', line=dict(color='magenta')))
+    fig_rsi.add_trace(go.Scatter(x=data.index, y=data['RSI'], name="RSI", line=dict(color="magenta")))
     fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=70, y1=70, line=dict(color="red", dash="dash"))
     fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=30, y1=30, line=dict(color="green", dash="dash"))
-    fig_rsi.update_layout(height=300)
+    fig_rsi.update_layout(title="📉 Relative Strength Index (RSI)", height=300)
     st.plotly_chart(fig_rsi, use_container_width=True)
-    st.info("RSI above 70 is considered overbought, below 30 is oversold.")
 
-# ---------------------- Pattern Recognition ---------------------- #
-with tabs[2]:
-    st.header("🔍 Pattern Recognition")
-    st.markdown("### 🔁 Reversal Patterns")
+    st.success("📌 Comment: RSI above 70 = Overbought, below 30 = Oversold.")
+
+# TAB 3: Pattern Recognition
+with tab3:
+    st.subheader("📈 Pattern Recognition (Basic Double Top)")
 
     def detect_double_top(prices, window=5):
         max_idx = argrelextrema(prices.values, np.greater, order=window)[0]
@@ -113,13 +154,13 @@ with tabs[2]:
 
     recent = data[-30:]
     double_tops = detect_double_top(recent['Close'])
-    fig_dt = go.Figure()
-    fig_dt.add_trace(go.Scatter(x=recent.index, y=recent['Close'], name="Close"))
-    fig_dt.add_trace(go.Scatter(x=double_tops.index, y=double_tops.values, name="Double Top", mode='markers', marker=dict(color='red')))
-    fig_dt.update_layout(title="Double Top Detection (Last 30 Days)", height=400)
-    st.plotly_chart(fig_dt, use_container_width=True)
-    if not double_tops.empty:
-        st.warning("⚠️ Possible Double Top pattern indicating bearish reversal.")
 
-    st.markdown("### 📈 Continuation Patterns")
-    st.info("🚧 More pattern detections like Flags, Wedges, Head & Shoulders coming soon!")
+    fig_pattern = go.Figure()
+    fig_pattern.add_trace(go.Scatter(x=recent.index, y=recent['Close'], name="Close Price"))
+    fig_pattern.add_trace(go.Scatter(x=double_tops.index, y=double_tops.values,
+                                     name="Double Top", mode='markers', marker=dict(color='red')))
+    fig_pattern.update_layout(title="Double Top Pattern Detection (30 Days)", height=400)
+    st.plotly_chart(fig_pattern, use_container_width=True)
+
+    if not double_tops.empty:
+        st.warning("⚠️ Double Top pattern may indicate a reversal trend.")
