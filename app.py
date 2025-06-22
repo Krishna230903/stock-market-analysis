@@ -1,15 +1,18 @@
-# Complete Streamlit App for Nifty 50 Stock Analysis (Updated with More Patterns)
+# Complete Streamlit App for Nifty 50 Stock Analysis (Updated)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 import ta
 import numpy as np
-from scipy.signal import argrelextrema
-from sklearn.linear_model import LinearRegression
-from io import BytesIO
+from datetime import timedelta
 
-# List of NIFTY 50 companies and tickers
+# Set page config
+st.set_page_config(layout="wide")
+
+# Title and Inputs
+st.markdown("# 📈 Nifty 50 Stock Market Analyzer")
+
 nifty50_stocks = {
     "Adani Enterprises": "ADANIENT.NS", "Adani Ports": "ADANIPORTS.NS", "Apollo Hospitals": "APOLLOHOSP.NS",
     "Asian Paints": "ASIANPAINT.NS", "Axis Bank": "AXISBANK.NS", "Bajaj Auto": "BAJAJ-AUTO.NS",
@@ -29,9 +32,6 @@ nifty50_stocks = {
     "Wipro": "WIPRO.NS"
 }
 
-st.set_page_config(layout="wide")
-st.title("📈 Nifty 50 Stock Market Analyzer")
-
 col1, col2 = st.columns(2)
 with col1:
     selected_stock = st.selectbox("Select a NIFTY 50 Stock:", sorted(nifty50_stocks.keys()))
@@ -46,7 +46,7 @@ def fetch_data(ticker, start, end):
     try:
         return yf.download(ticker, start=start, end=end)
     except:
-        return None
+        return pd.DataFrame()
 
 with st.spinner("📡 Fetching data..."):
     data = fetch_data(ticker, start_date, end_date)
@@ -61,9 +61,11 @@ if isinstance(data.columns, pd.MultiIndex):
 st.write("📊 Sample Data", data.tail())
 
 # ---------------------- Candlestick Chart ---------------------- #
+st.subheader(f"📈 {ticker} - Candlestick Chart")
 candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
-if not candlestick_data.empty:
-    st.subheader(f"📈 {selected_stock} - Candlestick Chart")
+if candlestick_data.empty:
+    st.warning("⚠️ No valid candlestick data to display.")
+else:
     fig = go.Figure(data=[
         go.Candlestick(x=candlestick_data.index,
                        open=candlestick_data['Open'],
@@ -74,66 +76,81 @@ if not candlestick_data.empty:
     fig.update_layout(xaxis_rangeslider_visible=False, height=400)
     st.plotly_chart(fig, use_container_width=True)
 
-# ---------------------- Tabs ---------------------- #
-tabs = st.tabs(["📊 Fundamental Analysis", "📉 Technical Analysis", "🧠 Pattern & Trend Insights"])
+# ---------------------- Fundamental Analysis ---------------------- #
+st.subheader("📊 Fundamental Analysis")
+ticker_info = yf.Ticker(ticker).info
+
+try:
+    roe = round(100 * (ticker_info['netIncome'] / ticker_info['totalStockholderEquity']), 2)
+    de_ratio = round(ticker_info['totalDebt'] / ticker_info['totalStockholderEquity'], 2)
+    eps = ticker_info.get('trailingEps', None)
+    pe_ratio = round(ticker_info['currentPrice'] / eps, 2) if eps else None
+except:
+    roe = de_ratio = eps = pe_ratio = None
+
+st.markdown(f"**Return on Equity (ROE):** {roe}%")
+st.markdown(f"**Debt-to-Equity Ratio (D/E):** {de_ratio}")
+st.markdown(f"**Earnings Per Share (EPS):** {eps}")
+st.markdown(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio}")
+
+# Risk Comment
+risk_comment = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
+st.info(f"💡 Risk Comment Based on D/E Ratio: **{risk_comment}**")
+
+# ---------------------- Pattern and Trend Detection ---------------------- #
+st.subheader("🧠 Trend & Pattern Insights")
+recent_data = data[-30:].copy()
+recent_data['SMA20'] = recent_data['Close'].rolling(window=20).mean()
+recent_data['SMA50'] = recent_data['Close'].rolling(window=50).mean()
+
+if recent_data['SMA20'].iloc[-1] > recent_data['SMA50'].iloc[-1]:
+    st.success("📌 Trend Based on SMA Crossover: Uptrend")
+else:
+    st.error("📌 Trend Based on SMA Crossover: Downtrend")
+
+# Pattern detection examples
+pattern_fig = go.Figure()
+pattern_fig.add_trace(go.Scatter(x=recent_data.index, y=recent_data['Close'], name="Price"))
+
+# Double Top Pattern (basic logic)
+def detect_double_top(prices, window=5):
+    local_max = (prices == prices.rolling(window, center=True).max())
+    return prices[local_max].dropna()
+
+double_tops = detect_double_top(recent_data['Close'])
+if not double_tops.empty:
+    st.error("🔺 Possible Double Top Pattern Detected — Bearish Reversal")
+    pattern_fig.add_trace(go.Scatter(x=double_tops.index, y=double_tops.values,
+                                     name="Double Top", mode='markers', marker=dict(color='red', size=10)))
+
+# Head & Shoulders Placeholder (custom logic needed)
+# More advanced pattern recognition to be added here (triangles, wedges, etc.)
+
+pattern_fig.update_layout(title="Detected Patterns (Last 30 Days)", height=400)
+st.plotly_chart(pattern_fig, use_container_width=True)
 
 # ---------------------- Technical Analysis ---------------------- #
-with tabs[1]:
-    data['SMA20'] = data['Close'].rolling(window=20).mean()
-    data['SMA50'] = data['Close'].rolling(window=50).mean()
-    data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
+st.subheader("📉 Technical Analysis")
+# Moving Averages
+data['SMA20'] = data['Close'].rolling(window=20).mean()
+data['SMA50'] = data['Close'].rolling(window=50).mean()
 
-    st.subheader("📈 Moving Averages")
-    fig_ma = go.Figure()
-    fig_ma.add_trace(go.Scatter(x=data.index, y=data['Close'], name='Close'))
-    fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA20'], name='SMA 20'))
-    fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA50'], name='SMA 50'))
-    fig_ma.update_layout(height=400)
-    st.plotly_chart(fig_ma, use_container_width=True)
+fig_ma = go.Figure()
+fig_ma.add_trace(go.Scatter(x=data.index, y=data['Close'], name="Close Price", line=dict(color="white")))
+fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA20'], name="SMA 20", line=dict(color="blue")))
+fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA50'], name="SMA 50", line=dict(color="orange")))
+fig_ma.update_layout(title="Moving Averages (SMA 20 & 50)", height=400)
+st.plotly_chart(fig_ma, use_container_width=True)
 
-    st.subheader("📉 Relative Strength Index (RSI)")
-    fig_rsi = go.Figure()
-    fig_rsi.add_trace(go.Scatter(x=data.index, y=data['RSI'], name="RSI", line=dict(color="magenta")))
-    fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=70, y1=70,
-                      line=dict(color="red", dash="dash"))
-    fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=30, y1=30,
-                      line=dict(color="green", dash="dash"))
-    fig_rsi.update_layout(template="plotly_dark", height=300)
-    st.plotly_chart(fig_rsi, use_container_width=True)
-    st.success("📌 RSI above 70 = Overbought | Below 30 = Oversold")
+# RSI
+data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
+fig_rsi = go.Figure()
+fig_rsi.add_trace(go.Scatter(x=data.index, y=data['RSI'], name="RSI", line=dict(color="magenta")))
+fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=70, y1=70,
+                  line=dict(color="red", dash="dash"))
+fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=30, y1=30,
+                  line=dict(color="green", dash="dash"))
+fig_rsi.update_layout(title="RSI (Relative Strength Index)", height=300)
+st.plotly_chart(fig_rsi, use_container_width=True)
 
-# ---------------------- Pattern & Trend Analysis ---------------------- #
-def detect_double_top(data):
-    close = data['Close']
-    local_max = argrelextrema(close.values, np.greater, order=5)[0]
-    if len(local_max) >= 2:
-        for i in range(len(local_max)-1):
-            if abs(close.iloc[local_max[i]] - close.iloc[local_max[i+1]]) < 0.01 * close.iloc[local_max[i]]:
-                return local_max[i], local_max[i+1]
-    return None
-
-def plot_pattern_chart(data, pattern_locs, pattern_type):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data.index, y=data['Close'], name='Close'))
-    for loc in pattern_locs:
-        fig.add_trace(go.Scatter(x=[data.index[loc]], y=[data['Close'].iloc[loc]], mode='markers+text',
-                                 marker=dict(color='red', size=10), name=pattern_type,
-                                 text=[pattern_type], textposition='top center'))
-    fig.update_layout(title=f"📉 Pattern Detected: {pattern_type}", height=400)
-    return fig
-
-with tabs[2]:
-    st.subheader("🧠 Trend & Pattern Insights")
-    trend = "Uptrend" if data['SMA20'].iloc[-1] > data['SMA50'].iloc[-1] else "Downtrend"
-    st.markdown(f"**📊 Trend Based on SMA Crossover:** {trend}")
-
-    double_top = detect_double_top(data)
-    if double_top:
-        st.warning("🔺 Possible Double Top Pattern Detected — Bearish Reversal")
-        fig_pattern = plot_pattern_chart(data, double_top, "Double Top")
-        st.plotly_chart(fig_pattern, use_container_width=True)
-    else:
-        st.info("✅ No clear double top pattern found.")
-
-    # TODO: Add wedge, triangle, pennant patterns (future improvements here)
-    st.caption("More patterns such as Wedges, Triangles, and Pennants can be added using machine learning or advanced heuristics.")
+st.info("📌 RSI above 70 = overbought, below 30 = oversold.")
