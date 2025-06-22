@@ -93,11 +93,19 @@ st.markdown(f"**Debt-to-Equity Ratio (D/E):** {de_ratio}")
 st.markdown(f"**Earnings Per Share (EPS):** {eps}")
 st.markdown(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio}")
 
-# Risk Comment
-risk_comment = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
-st.info(f"💡 Risk Comment Based on D/E Ratio: **{risk_comment}**")
+# Risk Comment with None check
+if de_ratio is not None:
+    if de_ratio < 1:
+        risk_comment = "Low Risk"
+    elif de_ratio < 2:
+        risk_comment = "Medium Risk"
+    else:
+        risk_comment = "High Risk"
+    st.info(f"💡 Risk Comment Based on D/E Ratio: **{risk_comment}**")
+else:
+    st.warning("⚠️ D/E Ratio not available. Risk analysis cannot be performed.")
 
-# ---------------------- Pattern and Trend Detection ---------------------- #
+# ---------------------- Trend & Pattern Detection ---------------------- #
 st.subheader("🧠 Trend & Pattern Insights")
 recent_data = data[-30:].copy()
 recent_data['SMA20'] = recent_data['Close'].rolling(window=20).mean()
@@ -108,11 +116,10 @@ if recent_data['SMA20'].iloc[-1] > recent_data['SMA50'].iloc[-1]:
 else:
     st.error("📌 Trend Based on SMA Crossover: Downtrend")
 
-# Pattern detection examples
+# Pattern detection example: Double Top
 pattern_fig = go.Figure()
 pattern_fig.add_trace(go.Scatter(x=recent_data.index, y=recent_data['Close'], name="Price"))
 
-# Double Top Pattern (basic logic)
 def detect_double_top(prices, window=5):
     local_max = (prices == prices.rolling(window, center=True).max())
     return prices[local_max].dropna()
@@ -122,9 +129,6 @@ if not double_tops.empty:
     st.error("🔺 Possible Double Top Pattern Detected — Bearish Reversal")
     pattern_fig.add_trace(go.Scatter(x=double_tops.index, y=double_tops.values,
                                      name="Double Top", mode='markers', marker=dict(color='red', size=10)))
-
-# Head & Shoulders Placeholder (custom logic needed)
-# More advanced pattern recognition to be added here (triangles, wedges, etc.)
 
 pattern_fig.update_layout(title="Detected Patterns (Last 30 Days)", height=400)
 st.plotly_chart(pattern_fig, use_container_width=True)
