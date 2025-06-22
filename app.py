@@ -1,4 +1,4 @@
-# Complete Streamlit App for Nifty 50 Stock Analysis (Updated)
+# Complete Streamlit App for Nifty 50 Stock Market Analyzer (Final Structure with Sections)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -60,7 +60,7 @@ if isinstance(data.columns, pd.MultiIndex):
 
 st.write("📊 Sample Data", data.tail())
 
-# ---------------------- Candlestick Chart ---------------------- #
+# ---------------------- Main Candlestick Chart ---------------------- #
 st.subheader(f"📈 {ticker} - Candlestick Chart")
 candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
 if candlestick_data.empty:
@@ -76,8 +76,8 @@ else:
     fig.update_layout(xaxis_rangeslider_visible=False, height=400)
     st.plotly_chart(fig, use_container_width=True)
 
-# ---------------------- Fundamental Analysis ---------------------- #
-st.subheader("📊 Fundamental Analysis")
+# ---------------------- 📊 Fundamental Analysis ---------------------- #
+st.header("📊 Fundamental Analysis")
 ticker_info = yf.Ticker(ticker).info
 
 try:
@@ -105,8 +105,34 @@ if de_ratio is not None:
 else:
     st.warning("⚠️ D/E Ratio not available. Risk analysis cannot be performed.")
 
-# ---------------------- Trend & Pattern Detection ---------------------- #
-st.subheader("🧠 Trend & Pattern Insights")
+# ---------------------- 📉 Technical Analysis ---------------------- #
+st.header("📉 Technical Analysis")
+# Moving Averages
+data['SMA20'] = data['Close'].rolling(window=20).mean()
+data['SMA50'] = data['Close'].rolling(window=50).mean()
+
+fig_ma = go.Figure()
+fig_ma.add_trace(go.Scatter(x=data.index, y=data['Close'], name="Close Price", line=dict(color="white")))
+fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA20'], name="SMA 20", line=dict(color="blue")))
+fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA50'], name="SMA 50", line=dict(color="orange")))
+fig_ma.update_layout(title="Moving Averages (SMA 20 & 50)", height=400)
+st.plotly_chart(fig_ma, use_container_width=True)
+
+# RSI
+data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
+fig_rsi = go.Figure()
+fig_rsi.add_trace(go.Scatter(x=data.index, y=data['RSI'], name="RSI", line=dict(color="magenta")))
+fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=70, y1=70,
+                  line=dict(color="red", dash="dash"))
+fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=30, y1=30,
+                  line=dict(color="green", dash="dash"))
+fig_rsi.update_layout(title="RSI (Relative Strength Index)", height=300)
+st.plotly_chart(fig_rsi, use_container_width=True)
+
+st.info("📌 RSI above 70 = overbought, below 30 = oversold.")
+
+# ---------------------- 🧠 Pattern & Trend Detection ---------------------- #
+st.header("🧠 Pattern & Trend Detection")
 recent_data = data[-30:].copy()
 recent_data['SMA20'] = recent_data['Close'].rolling(window=20).mean()
 recent_data['SMA50'] = recent_data['Close'].rolling(window=50).mean()
@@ -132,29 +158,3 @@ if not double_tops.empty:
 
 pattern_fig.update_layout(title="Detected Patterns (Last 30 Days)", height=400)
 st.plotly_chart(pattern_fig, use_container_width=True)
-
-# ---------------------- Technical Analysis ---------------------- #
-st.subheader("📉 Technical Analysis")
-# Moving Averages
-data['SMA20'] = data['Close'].rolling(window=20).mean()
-data['SMA50'] = data['Close'].rolling(window=50).mean()
-
-fig_ma = go.Figure()
-fig_ma.add_trace(go.Scatter(x=data.index, y=data['Close'], name="Close Price", line=dict(color="white")))
-fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA20'], name="SMA 20", line=dict(color="blue")))
-fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA50'], name="SMA 50", line=dict(color="orange")))
-fig_ma.update_layout(title="Moving Averages (SMA 20 & 50)", height=400)
-st.plotly_chart(fig_ma, use_container_width=True)
-
-# RSI
-data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
-fig_rsi = go.Figure()
-fig_rsi.add_trace(go.Scatter(x=data.index, y=data['RSI'], name="RSI", line=dict(color="magenta")))
-fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=70, y1=70,
-                  line=dict(color="red", dash="dash"))
-fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=30, y1=30,
-                  line=dict(color="green", dash="dash"))
-fig_rsi.update_layout(title="RSI (Relative Strength Index)", height=300)
-st.plotly_chart(fig_rsi, use_container_width=True)
-
-st.info("📌 RSI above 70 = overbought, below 30 = oversold.")
