@@ -91,51 +91,48 @@ tab1, tab2, tab3 = st.tabs(["📊 Fundamental Analysis", "📉 Technical Analysi
 with tab1:
     st.subheader("📊 Fundamental Analysis")
 
+    net_income = info.get("netIncome")
+    equity = info.get("totalStockholderEquity")
+    total_debt = info.get("totalDebt")
+    eps = info.get("trailingEps")
+    price = info.get("currentPrice")
+
+    # Prepare values
     try:
-        net_income = info.get("netIncome")
-        equity = info.get("totalStockholderEquity")
-        total_debt = info.get("totalDebt")
-        eps = info.get("trailingEps")
-        price = info.get("currentPrice")
+        roe = (float(net_income) / float(equity)) * 100 if net_income and equity else None
+    except:
+        roe = None
 
-        # Return on Equity
-        if net_income is not None and equity not in (None, 0):
-            roe = (float(net_income) / float(equity)) * 100
-            st.write(f"**Return on Equity (ROE):** {roe:.2f}%")
-        else:
-            st.write("**Return on Equity (ROE):** Data not available")
+    try:
+        de_ratio = float(total_debt) / float(equity) if total_debt and equity else None
+    except:
+        de_ratio = None
 
-        # Debt to Equity Ratio
-        if total_debt is not None and equity not in (None, 0):
-            de_ratio = float(total_debt) / float(equity)
-            st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
-        else:
-            de_ratio = None
-            st.write("**Debt-to-Equity Ratio (D/E):** Data not available")
+    try:
+        pe_ratio = float(price) / float(eps) if price and eps else None
+    except:
+        pe_ratio = None
 
-        # EPS
-        if eps is not None:
-            st.write(f"**Earnings Per Share (EPS):** {eps:.2f}")
-        else:
-            st.write("**Earnings Per Share (EPS):** Data not available")
+    # Build summary output
+    if roe is not None:
+        st.write(f"**Return on Equity (ROE):** {roe:.2f}%")
 
-        # P/E Ratio
-        if price is not None and eps not in (None, 0):
-            pe_ratio = float(price) / float(eps)
-            st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}")
-        else:
-            st.write("**Price-to-Earnings Ratio (P/E):** Data not available")
+    if de_ratio is not None:
+        st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
 
-        # Risk comment
-        if de_ratio is not None:
-            risk = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
-            st.success(f"📌 Risk Assessment: {risk}")
-        else:
-            st.info("Risk assessment not possible due to missing D/E data.")
+    if eps is not None:
+        st.write(f"**Earnings Per Share (EPS):** {eps:.2f}")
 
-    except Exception as e:
-        st.warning(f"⚠️ Error loading fundamentals: {e}")
+    if pe_ratio is not None:
+        st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}")
 
+    if roe is None and de_ratio is None and eps is None and pe_ratio is None:
+        st.info("ℹ️ Fundamental data not available for this stock.")
+
+    # Optional: Add risk comment only if D/E is present
+    if de_ratio is not None:
+        risk = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
+        st.success(f"📌 Risk Assessment: {risk}")
 
 # --- Tab 2: Technical Analysis ---
 with tab2:
