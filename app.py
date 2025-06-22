@@ -88,40 +88,78 @@ else:
 tab1, tab2, tab3 = st.tabs(["📊 Fundamental Analysis", "📉 Technical Analysis", "📈 Pattern Recognition"])
 
 # --- Tab 1: Fundamental Analysis ---
-# --- D/E Ratio and Risk Assessment ---
+with tab1:
+    st.subheader("📊 Fundamental Analysis")
 
-# Step 1: Try actual D/E
-if total_debt is not None and equity not in (None, 0):
+    # --- STOCK PROFILE ---
+    st.markdown("### 🏷️ Company Profile")
+    company_name = info.get("longName", "N/A")
+    sector = info.get("sector", "N/A")
+    industry = info.get("industry", "N/A")
+    market_cap = info.get("marketCap")
+
+    if market_cap is not None:
+        market_cap = f"{market_cap / 1e7:.2f} Cr"  # Convert to crores
+    else:
+        market_cap = "N/A"
+
+    st.write(f"**Company:** {company_name}")
+    st.write(f"**Sector:** {sector}")
+    st.write(f"**Industry:** {industry}")
+    st.write(f"**Market Cap:** {market_cap}")
+
+    # --- FINANCIAL METRICS ---
+    st.markdown("### 📈 Key Financial Metrics")
+
+    net_income = info.get("netIncome")
+    equity = info.get("totalStockholderEquity")
+    total_debt = info.get("totalDebt")
+    eps = info.get("trailingEps")
+    price = info.get("currentPrice")
+
+    # Return on Equity (ROE)
     try:
-        de_ratio = float(total_debt) / float(equity)
-        st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
+        if net_income is not None and equity not in (None, 0):
+            roe = (float(net_income) / float(equity)) * 100
+            st.write(f"**Return on Equity (ROE):** {roe:.2f}%")
+        else:
+            st.write("**Return on Equity (ROE):** Data not available")
     except:
-        de_ratio = None
+        st.write("**Return on Equity (ROE):** Error in calculation")
 
-# Step 2: Fallback D/E (estimated)
-if de_ratio is None:
-    default_de_map = {
-        "RELIANCE.NS": 0.40,
-        "INFY.NS": 0.10,
-        "TCS.NS": 0.05,
-        "HDFCBANK.NS": 0.90,
-        "ICICIBANK.NS": 1.20,
-        "ITC.NS": 0.02,
-        "SBIN.NS": 1.50,
-        # Add more as needed
-    }
-    de_ratio = default_de_map.get(ticker, None)
-    if de_ratio is not None:
-        st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f} _(default estimate)_")
+    # Debt-to-Equity Ratio (D/E)
+    de_ratio = None
+    if total_debt is not None and equity not in (None, 0):
+        try:
+            de_ratio = float(total_debt) / float(equity)
+            st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
+        except:
+            st.write("**Debt-to-Equity Ratio (D/E):** Error in calculation")
     else:
         st.write("**Debt-to-Equity Ratio (D/E):** Data not available")
 
-# Step 3: Risk Assessment
-if de_ratio is not None:
-    risk = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
-    st.success(f"📌 Risk Assessment: {risk}")
-else:
-    st.info("Risk assessment not possible due to missing D/E data.")
+    # Earnings Per Share (EPS)
+    if eps is not None:
+        st.write(f"**Earnings Per Share (EPS):** {eps:.2f}")
+    else:
+        st.write("**Earnings Per Share (EPS):** Data not available")
+
+    # Price-to-Earnings Ratio (P/E)
+    if price is not None and eps not in (None, 0):
+        try:
+            pe_ratio = float(price) / float(eps)
+            st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}")
+        except:
+            st.write("**Price-to-Earnings Ratio (P/E):** Error in calculation")
+    else:
+        st.write("**Price-to-Earnings Ratio (P/E):** Data not available")
+
+    # Risk Assessment based on D/E
+    if de_ratio is not None:
+        risk = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
+        st.success(f"📌 Risk Assessment: {risk}")
+    else:
+        st.info("Risk assessment not possible due to missing D/E data.")
 
 # --- Tab 2: Technical Analysis ---
 with tab2:
