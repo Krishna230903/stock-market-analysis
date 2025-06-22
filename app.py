@@ -1,4 +1,4 @@
-# Complete Streamlit App for Nifty 50 Stock Analysis (Fixed RSI & Full Tabs)
+# Complete Streamlit App for Nifty 50 Stock Analysis (With Candlestick, RSI, SMA, and Pattern Insights)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -37,11 +37,23 @@ start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2022-01-01"))
 end_date = st.sidebar.date_input("End Date", pd.to_datetime("today"))
 
 # ============================ DATA ============================
-data = yf.download(ticker, start=start_date, end=end_date)
-info = yf.Ticker(ticker).info
-if data.empty:
-    st.error("No data found for this stock in selected range.")
+def fetch_data(ticker, start, end):
+    try:
+        return yf.download(ticker, start=start, end=end)
+    except:
+        return None
+
+with st.spinner("📡 Fetching data..."):
+    data = fetch_data(ticker, start_date, end_date)
+
+if data is None or data.empty:
+    st.error("⚠️ No historical data found for this ticker.")
     st.stop()
+
+if isinstance(data.columns, pd.MultiIndex):
+    data.columns = data.columns.get_level_values(0)
+
+st.write("📊 Sample Data", data.tail())
 
 # ============================ TABS ============================
 tab1, tab2, tab3 = st.tabs(["📊 Fundamental Analysis", "📈 Technical Analysis", "🧠 Pattern & Trend Insights"])
@@ -49,22 +61,22 @@ tab1, tab2, tab3 = st.tabs(["📊 Fundamental Analysis", "📈 Technical Analysi
 # ============================ FUNDAMENTAL ANALYSIS ============================
 with tab1:
     st.subheader("📊 Fundamental Analysis")
-    st.markdown(f"**Market Cap:** {info.get('marketCap', 'NA')}")
-    roe = info.get("returnOnEquity", 0)*100
+    info = yf.Ticker(ticker).info
+    roe = info.get("returnOnEquity", 0) * 100
     eps = info.get("trailingEps", 0)
     pe = info.get("trailingPE", 0)
     de = info.get("debtToEquity", 0)
+    risk = "High" if de > 1.2 else "Medium" if de > 0.5 else "Low"
 
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Return on Equity (ROE) %", f"{roe:.2f}", delta=f"{'↑' if roe > 15 else '↓'}")
+        st.metric("Return on Equity (ROE) %", f"{roe:.2f}")
         st.metric("EPS", f"{eps:.2f}")
     with col2:
-        st.metric("P/E Ratio", f"{pe:.2f}", delta_color="inverse")
+        st.metric("P/E Ratio", f"{pe:.2f}")
         st.metric("Debt-to-Equity (D/E)", f"{de:.2f}")
 
-    risk = "High" if de > 1.2 else "Medium" if de > 0.5 else "Low"
-    st.warning(f"🔎 **Risk Factor:** {risk}")
+    st.warning(f"🔎 Risk Factor: {risk}")
 
     df_export = pd.DataFrame({
         "ROE (%)": [roe],
@@ -82,54 +94,56 @@ with tab2:
     data['SMA50'] = data['Close'].rolling(window=50).mean()
     data['SMA200'] = data['Close'].rolling(window=200).mean()
 
-    # Fixed RSI calculation
-    close_prices = data['Close'].dropna()
-    rsi_series = ta.momentum.RSIIndicator(close=close_prices, window=14).rsi()
-    data['RSI'] = rsi_series
+    # Candlestick Chart
+    candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
+    if not candlestick_data.empty:
+        fig = go.Figure(data=[go.Candlestick(
+            x=candlestick_data.index,
+            open=candlestick_data['Open'],
+            high=candlestick_data['High'],
+            low=candlestick_data['Low'],
+            close=candlestick_data['Close'],
+            increasing_line_color='green',
+            decreasing_line_color='red',
+            name='Candlestick')
+        ])
+        fig.add_trace(go.Scatter(
+            x=data.index, y=data['SMA50'], mode='lines', name='SMA 50', line=dict(color='blue')
+        ))
+        fig.add_trace(go.Scatter(
+            x=data.index, y=data['SMA200'], mode='lines', name='SMA 200', line=dict(color='orange')
+        ))
+        fig.update_layout(xaxis_rangeslider_visible=False, title="Candlestick with SMA")
+        st.plotly_chart(fig, use_container_width=True)
 
-    fig = go.Figure()
-
-# Candlestick
-fig.add_trace(go.Candlestick(
-    x=data.index,
-    open=data['Open'],
-    high=data['High'],
-    low=data['Low'],
-    close=data['Close'],
-    name='Candlestick',
-    increasing_line_color='green',
-    decreasing_line_color='red'
-))
-
-# SMA overlays
-fig.add_trace(go.Scatter(
-    x=data.index, y=data['SMA50'], mode='lines', name='SMA 50', line=dict(color='blue', width=1.5)
-))
-fig.add_trace(go.Scatter(
-    x=data.index, y=data['SMA200'], mode='lines', name='SMA 200', line=dict(color='orange', width=1.5)
-))
-
-fig.update_layout(xaxis_rangeslider_visible=False, title="Candlestick with Moving Averages")
-st.plotly_chart(fig, use_container_width=True)
+    # RSI Calculation
+    data['RSI'] = ta.momentum.RSIIndicator(data['Close'].dropna(), window=14).rsi()
+    fig_rsi = go.Figure()
+    fig_rsi.add_trace(go.Scatter(x=data.index, y=data['RSI'], name="RSI", line=dict(color="magenta")))
+    fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=70, y1=70,
+                      line=dict(color="red", dash="dash"))
+    fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=30, y1=30,
+                      line=dict(color="green", dash="dash"))
+    fig_rsi.update_layout(title="📉 Relative Strength Index (RSI)", template="plotly_dark", height=300)
+    st.plotly_chart(fig_rsi, use_container_width=True)
 
     # RSI Alerts
     if 'RSI' in data.columns and not data['RSI'].dropna().empty:
         latest_rsi = data['RSI'].dropna().iloc[-1]
         if latest_rsi > 70:
-            st.error(f"⚠️ RSI is {latest_rsi:.2f} — Stock is Overbought (Consider Sell)")
+            st.error(f"🔴 RSI is {latest_rsi:.2f} — Overbought!")
         elif latest_rsi < 30:
-            st.success(f"✅ RSI is {latest_rsi:.2f} — Stock is Oversold (Consider Buy)")
+            st.success(f"🟢 RSI is {latest_rsi:.2f} — Oversold!")
         else:
             st.info(f"ℹ️ RSI is {latest_rsi:.2f} — Neutral")
+    st.success("📌 Comment: A bullish crossover occurs when SMA50 rises above SMA200. RSI above 70 = overbought, below 30 = oversold.")
 
 # ============================ PATTERN & TREND ============================
 with tab3:
     st.subheader("🧠 Trend & Pattern Insights")
-
     trend = "Uptrend" if data['SMA50'].iloc[-1] > data['SMA200'].iloc[-1] else "Downtrend"
-    st.markdown(f"**📊 Trend Based on MA Crossover:** {trend}")
+    st.markdown(f"**📊 Trend Based on SMA Crossover:** {trend}")
 
-    # Double Top / Bottom detection (simple approach)
     prices = data['Close']
     local_max = prices[(prices.shift(1) < prices) & (prices.shift(-1) < prices)]
     local_min = prices[(prices.shift(1) > prices) & (prices.shift(-1) > prices)]
