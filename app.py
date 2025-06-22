@@ -88,51 +88,40 @@ else:
 tab1, tab2, tab3 = st.tabs(["📊 Fundamental Analysis", "📉 Technical Analysis", "📈 Pattern Recognition"])
 
 # --- Tab 1: Fundamental Analysis ---
-with tab1:
-    st.subheader("📊 Fundamental Analysis")
+# --- D/E Ratio and Risk Assessment ---
 
-    net_income = info.get("netIncome")
-    equity = info.get("totalStockholderEquity")
-    total_debt = info.get("totalDebt")
-    eps = info.get("trailingEps")
-    price = info.get("currentPrice")
-
-    # Prepare values
+# Step 1: Try actual D/E
+if total_debt is not None and equity not in (None, 0):
     try:
-        roe = (float(net_income) / float(equity)) * 100 if net_income and equity else None
-    except:
-        roe = None
-
-    try:
-        de_ratio = float(total_debt) / float(equity) if total_debt and equity else None
+        de_ratio = float(total_debt) / float(equity)
+        st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
     except:
         de_ratio = None
 
-    try:
-        pe_ratio = float(price) / float(eps) if price and eps else None
-    except:
-        pe_ratio = None
-
-    # Build summary output
-    if roe is not None:
-        st.write(f"**Return on Equity (ROE):** {roe:.2f}%")
-
+# Step 2: Fallback D/E (estimated)
+if de_ratio is None:
+    default_de_map = {
+        "RELIANCE.NS": 0.40,
+        "INFY.NS": 0.10,
+        "TCS.NS": 0.05,
+        "HDFCBANK.NS": 0.90,
+        "ICICIBANK.NS": 1.20,
+        "ITC.NS": 0.02,
+        "SBIN.NS": 1.50,
+        # Add more as needed
+    }
+    de_ratio = default_de_map.get(ticker, None)
     if de_ratio is not None:
-        st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
+        st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f} _(default estimate)_")
+    else:
+        st.write("**Debt-to-Equity Ratio (D/E):** Data not available")
 
-    if eps is not None:
-        st.write(f"**Earnings Per Share (EPS):** {eps:.2f}")
-
-    if pe_ratio is not None:
-        st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}")
-
-    if roe is None and de_ratio is None and eps is None and pe_ratio is None:
-        st.info("ℹ️ Fundamental data not available for this stock.")
-
-    # Optional: Add risk comment only if D/E is present
-    if de_ratio is not None:
-        risk = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
-        st.success(f"📌 Risk Assessment: {risk}")
+# Step 3: Risk Assessment
+if de_ratio is not None:
+    risk = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
+    st.success(f"📌 Risk Assessment: {risk}")
+else:
+    st.info("Risk assessment not possible due to missing D/E data.")
 
 # --- Tab 2: Technical Analysis ---
 with tab2:
