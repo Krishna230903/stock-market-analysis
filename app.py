@@ -1,4 +1,4 @@
-# Complete Streamlit App for Nifty 50 Stock Analysis (with Fundamental & Technical Tabs)
+# Complete Streamlit App for Nifty 50 Stock Analysis (Fixed RSI Issue + Tabs)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -81,12 +81,11 @@ with tab2:
     st.subheader("📈 Technical Analysis")
     data['SMA50'] = data['Close'].rolling(window=50).mean()
     data['SMA200'] = data['Close'].rolling(window=200).mean()
-   # Ensure close prices are clean and 1D
-close_prices = pd.Series(data['Close'].values, index=data.index).dropna()
 
-# Calculate RSI safely
-rsi_series = ta.momentum.RSIIndicator(close=close_prices, window=14).rsi()
-data['RSI'] = rsi_series
+    # Fix for RSI calculation
+    close_prices = pd.Series(data['Close'].values, index=data.index).dropna()
+    rsi_series = ta.momentum.RSIIndicator(close=close_prices, window=14).rsi()
+    data['RSI'] = rsi_series
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='Close'))
@@ -95,7 +94,7 @@ data['RSI'] = rsi_series
     st.plotly_chart(fig, use_container_width=True)
 
     # RSI Alerts
-    latest_rsi = data['RSI'].iloc[-1]
+    latest_rsi = data['RSI'].dropna().iloc[-1]
     if latest_rsi > 70:
         st.error(f"⚠️ RSI is {latest_rsi:.2f} — Stock is Overbought (Consider Sell)")
     elif latest_rsi < 30:
@@ -120,5 +119,3 @@ with tab3:
         st.success("🔻 Possible Double Bottom Pattern Detected — Bullish Reversal")
     else:
         st.info("No strong reversal pattern detected.")
-
-
