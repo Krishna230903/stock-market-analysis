@@ -1,4 +1,4 @@
-# Complete Streamlit App for Nifty 50 Stock Analysis (Fixed RSI Issue + Tabs)
+# Complete Streamlit App for Nifty 50 Stock Analysis (Fixed RSI & Full Tabs)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -82,25 +82,45 @@ with tab2:
     data['SMA50'] = data['Close'].rolling(window=50).mean()
     data['SMA200'] = data['Close'].rolling(window=200).mean()
 
-    # Fix for RSI calculation
-    close_prices = pd.Series(data['Close'].values, index=data.index).dropna()
+    # Fixed RSI calculation
+    close_prices = data['Close'].dropna()
     rsi_series = ta.momentum.RSIIndicator(close=close_prices, window=14).rsi()
     data['RSI'] = rsi_series
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name='Close'))
-    fig.add_trace(go.Scatter(x=data.index, y=data['SMA50'], name='SMA 50'))
-    fig.add_trace(go.Scatter(x=data.index, y=data['SMA200'], name='SMA 200'))
-    st.plotly_chart(fig, use_container_width=True)
+
+# Candlestick
+fig.add_trace(go.Candlestick(
+    x=data.index,
+    open=data['Open'],
+    high=data['High'],
+    low=data['Low'],
+    close=data['Close'],
+    name='Candlestick',
+    increasing_line_color='green',
+    decreasing_line_color='red'
+))
+
+# SMA overlays
+fig.add_trace(go.Scatter(
+    x=data.index, y=data['SMA50'], mode='lines', name='SMA 50', line=dict(color='blue', width=1.5)
+))
+fig.add_trace(go.Scatter(
+    x=data.index, y=data['SMA200'], mode='lines', name='SMA 200', line=dict(color='orange', width=1.5)
+))
+
+fig.update_layout(xaxis_rangeslider_visible=False, title="Candlestick with Moving Averages")
+st.plotly_chart(fig, use_container_width=True)
 
     # RSI Alerts
-    latest_rsi = data['RSI'].dropna().iloc[-1]
-    if latest_rsi > 70:
-        st.error(f"⚠️ RSI is {latest_rsi:.2f} — Stock is Overbought (Consider Sell)")
-    elif latest_rsi < 30:
-        st.success(f"✅ RSI is {latest_rsi:.2f} — Stock is Oversold (Consider Buy)")
-    else:
-        st.info(f"ℹ️ RSI is {latest_rsi:.2f} — Neutral")
+    if 'RSI' in data.columns and not data['RSI'].dropna().empty:
+        latest_rsi = data['RSI'].dropna().iloc[-1]
+        if latest_rsi > 70:
+            st.error(f"⚠️ RSI is {latest_rsi:.2f} — Stock is Overbought (Consider Sell)")
+        elif latest_rsi < 30:
+            st.success(f"✅ RSI is {latest_rsi:.2f} — Stock is Oversold (Consider Buy)")
+        else:
+            st.info(f"ℹ️ RSI is {latest_rsi:.2f} — Neutral")
 
 # ============================ PATTERN & TREND ============================
 with tab3:
