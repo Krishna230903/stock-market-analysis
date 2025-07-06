@@ -166,21 +166,27 @@ st.header(f"{info.get('longName', selected_stock_name)} ({ticker})")
 # --- Candlestick Chart ---
 try:
     st.subheader("📊 Candlestick Chart")
-    fig_candlestick = go.Figure(data=[go.Candlestick(
-        x=data.index,
-        open=data['Open'],
-        high=data['High'],
-        low=data['Low'],
-        close=data['Close'],
-        name=ticker
-    )])
-    fig_candlestick.update_layout(
-        xaxis_rangeslider_visible=False,
-        height=450,
-        title=f"{selected_stock_name} Price Action",
-        yaxis_title="Price (INR)"
-    )
-    st.plotly_chart(fig_candlestick, use_container_width=True)
+    # Create a specific dataframe for the candlestick chart, dropping any rows that lack OHLC data.
+    candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
+
+    if candlestick_data.empty:
+        st.warning("⚠️ No valid candlestick data to display for the selected period.")
+    else:
+        fig_candlestick = go.Figure(data=[go.Candlestick(
+            x=candlestick_data.index,
+            open=candlestick_data['Open'],
+            high=candlestick_data['High'],
+            low=candlestick_data['Low'],
+            close=candlestick_data['Close'],
+            name=ticker
+        )])
+        fig_candlestick.update_layout(
+            xaxis_rangeslider_visible=False,
+            height=450,
+            title=f"{selected_stock_name} Price Action",
+            yaxis_title="Price (INR)"
+        )
+        st.plotly_chart(fig_candlestick, use_container_width=True)
 except Exception as e:
     st.error(f"Could not display Candlestick Chart. Error: {e}")
 
