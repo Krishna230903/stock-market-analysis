@@ -44,6 +44,11 @@ def fetch_data(ticker, start_date, end_date):
             return None, f"No data found for ticker {ticker} in the selected date range."
         data.index = pd.to_datetime(data.index)
         data.sort_index(inplace=True)
+        # CRITICAL FIX: Drop rows with any NaN values, which can occur on non-trading days.
+        data.dropna(inplace=True)
+        # After dropping NaNs, the dataframe could become empty. Check again.
+        if data.empty:
+             return None, f"No valid trading data found for ticker {ticker} in the selected date range after cleaning."
         return data, None
     except Exception as e:
         return None, f"An error occurred while fetching data: {e}"
