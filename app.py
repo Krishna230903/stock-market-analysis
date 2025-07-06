@@ -374,6 +374,10 @@ with tab4:
         st.error("Could not fetch NIFTY 50 data for comparison.")
     else:
         try:
+            # FIX: Apply the same column flattening logic to the Nifty data
+            if isinstance(nifty_data.columns, pd.MultiIndex):
+                nifty_data.columns = nifty_data.columns.get_level_values(0)
+
             # Normalize data to compare performance
             normalized_stock = (data['Close'] / data['Close'].iloc[0]) * 100
             normalized_nifty = (nifty_data['Close'] / nifty_data['Close'].iloc[0]) * 100
