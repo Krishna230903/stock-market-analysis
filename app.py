@@ -44,9 +44,7 @@ def fetch_data(ticker, start_date, end_date):
             return None, f"No data found for ticker {ticker} in the selected date range."
         data.index = pd.to_datetime(data.index)
         data.sort_index(inplace=True)
-        # CRITICAL FIX: Drop rows with any NaN values, which can occur on non-trading days.
         data.dropna(inplace=True)
-        # After dropping NaNs, the dataframe could become empty. Check again.
         if data.empty:
              return None, f"No valid trading data found for ticker {ticker} in the selected date range after cleaning."
         return data, None
@@ -58,7 +56,7 @@ def get_company_info(ticker):
     """Fetches company information from Yahoo Finance."""
     try:
         info = yf.Ticker(ticker).info
-        if not info or 'symbol' not in info: # Check if info dict is empty or invalid
+        if not info or 'symbol' not in info:
             st.warning(f"Could not fetch complete company info for {ticker}.")
             return {}
         return info
@@ -70,16 +68,13 @@ def get_company_info(ticker):
 def find_patterns(data, order=5, K=2):
     """
     Detects Double Top, Double Bottom, and Head and Shoulders patterns.
-    `order`: How many points on each side to use for local extrema detection.
-    `K`: The percentage difference allowed between peaks/troughs.
     """
-    if len(data) < (order * 2 + 1): # Not enough data to find patterns
+    if len(data) < (order * 2 + 1):
         return {'double_top': [], 'double_bottom': [], 'head_shoulders': []}
 
     highs = data['High']
     lows = data['Low']
     
-    # Find local maxima and minima
     peak_indices = argrelextrema(highs.values, np.greater, order=order)[0]
     valley_indices = argrelextrema(lows.values, np.less, order=order)[0]
     
@@ -88,34 +83,25 @@ def find_patterns(data, order=5, K=2):
     
     patterns = {'double_top': [], 'double_bottom': [], 'head_shoulders': []}
     
-    # Double Top Detection
     for i in range(len(peaks) - 1):
-        p1 = peaks.iloc[i]
-        p2 = peaks.iloc[i+1]
-        
+        p1, p2 = peaks.iloc[i], peaks.iloc[i+1]
         if abs(p1 - p2) / p2 <= K/100:
             intervening_valleys = valleys[(valleys.index > peaks.index[i]) & (valleys.index < peaks.index[i+1])]
             if not intervening_valleys.empty:
                 patterns['double_top'].append((peaks.index[i], peaks.index[i+1]))
 
-    # Double Bottom Detection
     for i in range(len(valleys) - 1):
-        v1 = valleys.iloc[i]
-        v2 = valleys.iloc[i+1]
-        
+        v1, v2 = valleys.iloc[i], valleys.iloc[i+1]
         if abs(v1 - v2) / v2 <= K/100:
             intervening_peaks = peaks[(peaks.index > valleys.index[i]) & (peaks.index < valleys.index[i+1])]
             if not intervening_peaks.empty:
                 patterns['double_bottom'].append((valleys.index[i], valleys.index[i+1]))
 
-    # Head and Shoulders Detection
     for i in range(len(peaks) - 2):
         s1_idx, h_idx, s2_idx = peaks.index[i], peaks.index[i+1], peaks.index[i+2]
         s1, h, s2 = peaks.iloc[i], peaks.iloc[i+1], peaks.iloc[i+2]
-
-        if h > s1 and h > s2:
-            if abs(s1 - s2) / s2 <= (K+5)/100:
-                patterns['head_shoulders'].append((s1_idx, h_idx, s2_idx))
+        if h > s1 and h > s2 and abs(s1 - s2) / s2 <= (K+5)/100:
+            patterns['head_shoulders'].append((s1_idx, h_idx, s2_idx))
                 
     return patterns
 
@@ -160,13 +146,16 @@ if data is None or data.empty:
     st.error(f"⚠️ No historical data found for **{selected_stock_name} ({ticker})** for the selected period. Please try a different date range.")
     st.stop()
 
+# CRITICAL FIX: Flatten multilevel column if returned by yfinance, which can cause KeyErrors.
+if isinstance(data.columns, pd.MultiIndex):
+    data.columns = data.columns.get_level_values(0)
+
 # --- Main Content Area ---
 st.header(f"{info.get('longName', selected_stock_name)} ({ticker})")
 
 # --- Candlestick Chart ---
 try:
     st.subheader("📊 Candlestick Chart")
-    # Create a specific dataframe for the candlestick chart, dropping any rows that lack OHLC data.
     candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
 
     if candlestick_data.empty:
@@ -187,8 +176,11 @@ try:
             yaxis_title="Price (INR)"
         )
         st.plotly_chart(fig_candlestick, use_container_width=True)
+except KeyError:
+    st.error("Could not display Candlestick Chart. The required columns ('Open', 'High', 'Low', 'Close') were not found in the data from the API.")
+    st.info(f"Available columns: {data.columns.tolist()}")
 except Exception as e:
-    st.error(f"Could not display Candlestick Chart. Error: {e}")
+    st.error(f"Could not display Candlestick Chart. An unexpected error occurred: {e}")
 
 
 # --- TABS for Analysis ---
