@@ -9,7 +9,6 @@ from scipy.signal import argrelextrema
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Nifty 50 Stock Analyzer",
-    page_icon="📈",
     layout="wide"
 )
 
@@ -107,12 +106,12 @@ def find_patterns(data, order=5, K=2):
 
 
 # --- UI Layout ---
-st.title("📈 Nifty 50 Stock Market Analyzer")
+st.title("Nifty 50 Stock Market Analyzer")
 st.markdown("An advanced tool for fundamental and technical analysis of NIFTY 50 stocks.")
 
 # --- Sidebar for User Inputs ---
 with st.sidebar:
-    st.header("⚙️ Controls")
+    st.header("Controls")
     selected_stock_name = st.selectbox("Select a Stock:", sorted(nifty50_stocks.keys()))
     ticker = nifty50_stocks[selected_stock_name]
     
@@ -155,7 +154,7 @@ st.header(f"{info.get('longName', selected_stock_name)} ({ticker})")
 
 # --- Candlestick Chart ---
 try:
-    st.subheader("📊 Candlestick Chart")
+    st.subheader("Candlestick Chart")
     candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
 
     if candlestick_data.empty:
@@ -185,10 +184,10 @@ except Exception as e:
 
 # --- TABS for Analysis ---
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 **Fundamental Analysis**", 
-    "📉 **Technical Analysis**", 
-    "📈 **Pattern Recognition**",
-    "🌐 **NIFTY 50 Overview**"
+    "**Fundamental Analysis**", 
+    "**Technical Analysis**", 
+    "**Pattern Recognition**",
+    "**NIFTY 50 Overview**"
 ])
 
 
@@ -200,7 +199,7 @@ with tab1:
     else:
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("🏢 Company Profile")
+            st.subheader("Company Profile")
             st.markdown(f"**Sector:** {info.get('sector', 'N/A')}")
             st.markdown(f"**Industry:** {info.get('industry', 'N/A')}")
             st.markdown(f"**Website:** [{info.get('website', 'N/A')}]({info.get('website', 'N/A')})")
@@ -209,7 +208,7 @@ with tab1:
                 st.write(info.get('longBusinessSummary', 'No summary available.'))
 
         with col2:
-            st.subheader("💰 Key Financial Metrics")
+            st.subheader("Key Financial Metrics")
             market_cap = info.get("marketCap")
             roe = info.get("returnOnEquity")
             de_ratio = info.get("debtToEquity")
@@ -228,11 +227,11 @@ with tab1:
 
         if de_ratio is not None:
             if de_ratio < 1:
-                st.success("✅ **Low Risk:** Debt-to-Equity ratio is below 1, suggesting a healthy balance sheet.")
+                st.success("**Low Risk:** Debt-to-Equity ratio is below 1, suggesting a healthy balance sheet.")
             elif de_ratio < 2:
-                st.warning("⚠️ **Medium Risk:** Debt-to-Equity ratio is between 1 and 2. Caution is advised.")
+                st.warning("**Medium Risk:** Debt-to-Equity ratio is between 1 and 2. Caution is advised.")
             else:
-                st.error("🚨 **High Risk:** Debt-to-Equity ratio is above 2, indicating high leverage.")
+                st.error("**High Risk:** Debt-to-Equity ratio is above 2, indicating high leverage.")
 
 # --- Tab 2: Technical Analysis ---
 with tab2:
