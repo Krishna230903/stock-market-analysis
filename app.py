@@ -6,7 +6,15 @@ import ta
 import numpy as np
 from scipy.signal import argrelextrema
 
-# --- NIFTY 50 ticker list ---
+# --- Page Configuration ---
+st.set_page_config(
+    page_title="Nifty 50 Stock Analyzer",
+    page_icon="📈",
+    layout="wide"
+)
+
+# --- NIFTY 50 Ticker List ---
+# Using a dictionary for easy mapping of company names to tickers
 nifty50_stocks = {
     "Adani Enterprises": "ADANIENT.NS", "Adani Ports": "ADANIPORTS.NS", "Apollo Hospitals": "APOLLOHOSP.NS",
     "Asian Paints": "ASIANPAINT.NS", "Axis Bank": "AXISBANK.NS", "Bajaj Auto": "BAJAJ-AUTO.NS",
@@ -21,189 +29,337 @@ nifty50_stocks = {
     "M&M": "M&M.NS", "Maruti Suzuki": "MARUTI.NS", "NTPC": "NTPC.NS", "Nestle India": "NESTLEIND.NS",
     "Oil & Natural Gas Corp": "ONGC.NS", "Power Grid": "POWERGRID.NS", "Reliance Industries": "RELIANCE.NS",
     "SBI": "SBIN.NS", "SBI Life": "SBILIFE.NS", "Sun Pharma": "SUNPHARMA.NS", "TCS": "TCS.NS",
-    "Tech Mahindra": "TECHM.NS", "Tata Consumer": "TATACONSUM.NS", "Tata Motors": "TATAMOTORS.NS",
-    "Tata Steel": "TATASTEEL.NS", "Titan": "TITAN.NS", "UPL": "UPL.NS", "UltraTech Cement": "ULTRACEMCO.NS",
+    "Tata Consumer": "TATACONSUM.NS", "Tata Motors": "TATAMOTORS.NS", "Tata Steel": "TATASTEEL.NS",
+    "Tech Mahindra": "TECHM.NS", "Titan": "TITAN.NS", "UPL": "UPL.NS", "UltraTech Cement": "ULTRACEMCO.NS",
     "Wipro": "WIPRO.NS"
 }
 
-# --- UI ---
-st.title("📈 Nifty 50 Stock Market Analyzer")
-
-col1, col2 = st.columns(2)
-with col1:
-    selected_stock = st.selectbox("Select a NIFTY 50 Stock:", sorted(nifty50_stocks.keys()))
-with col2:
-    start_date = st.date_input("Start Date", pd.to_datetime("2022-01-01"))
-    end_date = st.date_input("End Date", pd.to_datetime("today"))
-
-ticker = nifty50_stocks[selected_stock]
-
-# --- Cached data fetch function ---
-@st.cache_data(ttl=3600)
+# --- Data Fetching Functions ---
+@st.cache_data(ttl=3600)  # Cache data for 1 hour
 def fetch_data(ticker, start_date, end_date):
+    """Fetches historical stock data from Yahoo Finance."""
     try:
-        data = yf.download(ticker, start=start_date, end=end_date)
+        data = yf.download(ticker, start=start_date, end=end_date, progress=False)
         if data.empty:
-            return None
+            return None, f"No data found for ticker {ticker} in the selected date range."
         data.index = pd.to_datetime(data.index)
         data.sort_index(inplace=True)
-        data.dropna(inplace=True)
-        return data
+        return data, None
     except Exception as e:
-        st.error(f"Error fetching data: {e}")
-        return None
+        return None, f"An error occurred while fetching data: {e}"
 
-# --- Fetch data safely ---
-with st.spinner("📡 Fetching data..."):
-    data = fetch_data(ticker, start_date, end_date)
-    info = yf.Ticker(ticker).info if data is not None else {}
+@st.cache_data(ttl=3600)
+def get_company_info(ticker):
+    """Fetches company information from Yahoo Finance."""
+    try:
+        return yf.Ticker(ticker).info
+    except Exception as e:
+        st.warning(f"Could not fetch company info: {e}")
+        return {}
 
-if data is None or data.empty:
-    st.error("⚠️ No historical data found for this ticker.")
+# --- Pattern Detection Functions ---
+def find_patterns(data, order=5, K=2):
+    """
+    Detects Double Top, Double Bottom, and Head and Shoulders patterns.
+    `order`: How many points on each side to use for local extrema detection.
+    `K`: The percentage difference allowed between peaks/troughs.
+    """
+    highs = data['High']
+    lows = data['Low']
+    
+    # Find local maxima and minima
+    peak_indices = argrelextrema(highs.values, np.greater, order=order)[0]
+    valley_indices = argrelextrema(lows.values, np.less, order=order)[0]
+    
+    peaks = highs.iloc[peak_indices]
+    valleys = lows.iloc[valley_indices]
+    
+    patterns = {'double_top': [], 'double_bottom': [], 'head_shoulders': []}
+    
+    # Double Top Detection
+    for i in range(len(peaks) - 1):
+        p1 = peaks.iloc[i]
+        p2 = peaks.iloc[i+1]
+        
+        # Check if peaks are close in price
+        if abs(p1 - p2) / p2 <= K/100:
+            # Find the intervening valley
+            intervening_valleys = valleys[(valleys.index > peaks.index[i]) & (valleys.index < peaks.index[i+1])]
+            if not intervening_valleys.empty:
+                patterns['double_top'].append((peaks.index[i], peaks.index[i+1]))
+
+    # Double Bottom Detection
+    for i in range(len(valleys) - 1):
+        v1 = valleys.iloc[i]
+        v2 = valleys.iloc[i+1]
+        
+        if abs(v1 - v2) / v2 <= K/100:
+            intervening_peaks = peaks[(peaks.index > valleys.index[i]) & (peaks.index < valleys.index[i+1])]
+            if not intervening_peaks.empty:
+                patterns['double_bottom'].append((valleys.index[i], valleys.index[i+1]))
+
+    # Head and Shoulders Detection
+    for i in range(len(peaks) - 2):
+        s1_idx, h_idx, s2_idx = peaks.index[i], peaks.index[i+1], peaks.index[i+2]
+        s1, h, s2 = peaks.iloc[i], peaks.iloc[i+1], peaks.iloc[i+2]
+
+        # Head must be higher than both shoulders
+        if h > s1 and h > s2:
+            # Shoulders should be roughly symmetrical
+            if abs(s1 - s2) / s2 <= (K+5)/100: # Looser condition for shoulders
+                patterns['head_shoulders'].append((s1_idx, h_idx, s2_idx))
+                
+    return patterns
+
+
+# --- UI Layout ---
+st.title("📈 Nifty 50 Stock Market Analyzer")
+st.markdown("An advanced tool for fundamental and technical analysis of NIFTY 50 stocks.")
+
+# --- Sidebar for User Inputs ---
+with st.sidebar:
+    st.header("⚙️ Controls")
+    selected_stock_name = st.selectbox("Select a Stock:", sorted(nifty50_stocks.keys()))
+    ticker = nifty50_stocks[selected_stock_name]
+    
+    date_range = st.date_input(
+        "Select Date Range",
+        [pd.to_datetime("2022-01-01"), pd.to_datetime("today")],
+        min_value=pd.to_datetime("2010-01-01"),
+        max_value=pd.to_datetime("today")
+    )
+    
+    if len(date_range) == 2:
+        start_date, end_date = date_range
+    else:
+        st.error("Please select a valid date range.")
+        st.stop()
+    
+    st.info(f"**Selected Ticker:** `{ticker}`")
+
+# --- Main Application Logic ---
+# Fetch data
+data, error_msg = fetch_data(ticker, start_date, end_date)
+info = get_company_info(ticker)
+
+if error_msg:
+    st.error(error_msg)
     st.stop()
 
-# Flatten multilevel column if needed
-if isinstance(data.columns, pd.MultiIndex):
-    data.columns = data.columns.get_level_values(0)
+if data is None or data.empty:
+    st.error(f"⚠️ No historical data found for **{selected_stock_name} ({ticker})** for the selected period. Please try a different date range.")
+    st.stop()
 
-st.write("📊 Sample Data", data.tail())
+# --- Main Content Area ---
+st.header(f"{info.get('longName', selected_stock_name)} ({ticker})")
 
 # --- Candlestick Chart ---
-candlestick_data = data.dropna(subset=['Open', 'High', 'Low', 'Close'])
-if candlestick_data.empty:
-    st.warning("⚠️ No valid candlestick data to display.")
-else:
-    st.subheader(f"📈 {ticker} - Candlestick Chart")
-    fig = go.Figure(data=[
-        go.Candlestick(x=candlestick_data.index,
-                       open=candlestick_data['Open'],
-                       high=candlestick_data['High'],
-                       low=candlestick_data['Low'],
-                       close=candlestick_data['Close'])
-    ])
-    fig.update_layout(xaxis_rangeslider_visible=False, height=400)
-    st.plotly_chart(fig, use_container_width=True)
+st.subheader("📊 Candlestick Chart")
+fig_candlestick = go.Figure(data=[go.Candlestick(
+    x=data.index,
+    open=data['Open'],
+    high=data['High'],
+    low=data['Low'],
+    close=data['Close'],
+    name=ticker
+)])
+fig_candlestick.update_layout(
+    xaxis_rangeslider_visible=False,
+    height=450,
+    title=f"{selected_stock_name} Price Action",
+    yaxis_title="Price (INR)"
+)
+st.plotly_chart(fig_candlestick, use_container_width=True)
 
-# --- TABS ---
-tab1, tab2, tab3 = st.tabs(["📊 Fundamental Analysis", "📉 Technical Analysis", "📈 Pattern Recognition"])
+
+# --- TABS for Analysis ---
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 **Fundamental Analysis**", 
+    "📉 **Technical Analysis**", 
+    "📈 **Pattern Recognition**",
+    "🌐 **NIFTY 50 Overview**"
+])
+
 
 # --- Tab 1: Fundamental Analysis ---
 with tab1:
-    st.subheader("📊 Fundamental Analysis")
-
-    # --- STOCK PROFILE ---
-    st.markdown("### 🏷️ Company Profile")
-    company_name = info.get("longName", "N/A")
-    sector = info.get("sector", "N/A")
-    industry = info.get("industry", "N/A")
-    market_cap = info.get("marketCap")
-
-    if market_cap is not None:
-        market_cap = f"{market_cap / 1e7:.2f} Cr"  # Convert to crores
+    st.header("Company Fundamentals")
+    if not info:
+        st.warning("Could not retrieve fundamental data.")
     else:
-        market_cap = "N/A"
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("🏢 Company Profile")
+            st.markdown(f"**Sector:** {info.get('sector', 'N/A')}")
+            st.markdown(f"**Industry:** {info.get('industry', 'N/A')}")
+            st.markdown(f"**Website:** [{info.get('website', 'N/A')}]({info.get('website', 'N/A')})")
+            
+            with st.expander("Business Summary"):
+                st.write(info.get('longBusinessSummary', 'No summary available.'))
 
-    st.write(f"**Company:** {company_name}")
-    st.write(f"**Sector:** {sector}")
-    st.write(f"**Industry:** {industry}")
-    st.write(f"**Market Cap:** {market_cap}")
+        with col2:
+            st.subheader("💰 Key Financial Metrics")
+            market_cap = info.get("marketCap")
+            roe = info.get("returnOnEquity")
+            de_ratio = info.get("debtToEquity")
+            eps = info.get("trailingEps")
+            pe_ratio = info.get("trailingPE")
+            pb_ratio = info.get("priceToBook")
+            div_yield = info.get("dividendYield")
 
-    # --- FINANCIAL METRICS ---
-    st.markdown("### 📈 Key Financial Metrics")
+            st.metric("Market Cap (Cr)", f"{market_cap / 1e7:.2f}" if market_cap else "N/A")
+            st.metric("Return on Equity (ROE)", f"{roe * 100:.2f}%" if roe else "N/A")
+            st.metric("Debt-to-Equity Ratio", f"{de_ratio:.2f}" if de_ratio else "N/A")
+            st.metric("Earnings Per Share (EPS)", f"{eps:.2f}" if eps else "N/A")
+            st.metric("Price-to-Earnings (P/E)", f"{pe_ratio:.2f}" if pe_ratio else "N/A")
+            st.metric("Price-to-Book (P/B)", f"{pb_ratio:.2f}" if pb_ratio else "N/A")
+            st.metric("Dividend Yield", f"{div_yield * 100:.2f}%" if div_yield else "N/A")
 
-    net_income = info.get("netIncome")
-    equity = info.get("totalStockholderEquity")
-    total_debt = info.get("totalDebt")
-    eps = info.get("trailingEps")
-    price = info.get("currentPrice")
-
-    # Return on Equity (ROE)
-    try:
-        if net_income is not None and equity not in (None, 0):
-            roe = (float(net_income) / float(equity)) * 100
-            st.write(f"**Return on Equity (ROE):** {roe:.2f}%")
-        else:
-            st.write("**Return on Equity (ROE):** Data not available")
-    except:
-        st.write("**Return on Equity (ROE):** Error in calculation")
-
-    # Debt-to-Equity Ratio (D/E)
-    de_ratio = None
-    if total_debt is not None and equity not in (None, 0):
-        try:
-            de_ratio = float(total_debt) / float(equity)
-            st.write(f"**Debt-to-Equity Ratio (D/E):** {de_ratio:.2f}")
-        except:
-            st.write("**Debt-to-Equity Ratio (D/E):** Error in calculation")
-    else:
-        st.write("**Debt-to-Equity Ratio (D/E):** Data not available")
-
-    # Earnings Per Share (EPS)
-    if eps is not None:
-        st.write(f"**Earnings Per Share (EPS):** {eps:.2f}")
-    else:
-        st.write("**Earnings Per Share (EPS):** Data not available")
-
-    # Price-to-Earnings Ratio (P/E)
-    if price is not None and eps not in (None, 0):
-        try:
-            pe_ratio = float(price) / float(eps)
-            st.write(f"**Price-to-Earnings Ratio (P/E):** {pe_ratio:.2f}")
-        except:
-            st.write("**Price-to-Earnings Ratio (P/E):** Error in calculation")
-    else:
-        st.write("**Price-to-Earnings Ratio (P/E):** Data not available")
-
-    # Risk Assessment based on D/E
-    if de_ratio is not None:
-        risk = "Low Risk" if de_ratio < 1 else "Medium Risk" if de_ratio < 2 else "High Risk"
-        st.success(f"📌 Risk Assessment: {risk}")
-    else:
-        st.info("Risk assessment not possible due to missing D/E data.")
+        if de_ratio is not None:
+            if de_ratio < 1:
+                st.success("✅ **Low Risk:** Debt-to-Equity ratio is below 1, suggesting a healthy balance sheet.")
+            elif de_ratio < 2:
+                st.warning("⚠️ **Medium Risk:** Debt-to-Equity ratio is between 1 and 2. Caution is advised.")
+            else:
+                st.error("🚨 **High Risk:** Debt-to-Equity ratio is above 2, indicating high leverage.")
 
 # --- Tab 2: Technical Analysis ---
 with tab2:
-    st.subheader("📉 Technical Analysis")
-
+    st.header("Technical Indicators")
+    
+    # Moving Averages
+    st.subheader("Moving Averages (SMA)")
     data['SMA20'] = data['Close'].rolling(window=20).mean()
     data['SMA50'] = data['Close'].rolling(window=50).mean()
-
+    data['SMA200'] = data['Close'].rolling(window=200).mean()
+    
     fig_ma = go.Figure()
-    fig_ma.add_trace(go.Scatter(x=data.index, y=data['Close'], name='Close Price'))
-    fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA20'], name='SMA 20', line=dict(color='blue')))
+    fig_ma.add_trace(go.Scatter(x=data.index, y=data['Close'], name='Close Price', line=dict(color='lightblue', width=1)))
+    fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA20'], name='SMA 20', line=dict(color='yellow')))
     fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA50'], name='SMA 50', line=dict(color='orange')))
-    fig_ma.update_layout(title='Moving Averages', height=400)
+    fig_ma.add_trace(go.Scatter(x=data.index, y=data['SMA200'], name='SMA 200', line=dict(color='red')))
+    fig_ma.update_layout(title='Simple Moving Averages', height=400, yaxis_title="Price (INR)")
     st.plotly_chart(fig_ma, use_container_width=True)
+    st.info("**Golden Cross:** SMA50 crosses above SMA200 (Bullish). **Death Cross:** SMA50 crosses below SMA200 (Bearish).")
 
-    st.subheader("📉 Relative Strength Index (RSI)")
+    # RSI
+    st.subheader("Relative Strength Index (RSI)")
     data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
-
     fig_rsi = go.Figure()
     fig_rsi.add_trace(go.Scatter(x=data.index, y=data['RSI'], name="RSI", line=dict(color="magenta")))
-    fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=70, y1=70, line=dict(color="red", dash="dash"))
-    fig_rsi.add_shape(type="line", x0=data.index.min(), x1=data.index.max(), y0=30, y1=30, line=dict(color="green", dash="dash"))
-    fig_rsi.update_layout(title="📉 Relative Strength Index (RSI)", height=300)
+    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought (70)")
+    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold (30)")
+    fig_rsi.update_layout(title="Relative Strength Index (RSI)", height=300, yaxis_title="RSI Value")
     st.plotly_chart(fig_rsi, use_container_width=True)
+    st.info("RSI > 70 suggests the stock may be overbought. RSI < 30 suggests it may be oversold.")
 
-    st.success("📌 RSI > 70 = Overbought, RSI < 30 = Oversold")
+    # Bollinger Bands
+    st.subheader("Bollinger Bands")
+    indicator_bb = ta.volatility.BollingerBands(close=data["Close"], window=20, window_dev=2)
+    data['bb_h'] = indicator_bb.bollinger_hband()
+    data['bb_l'] = indicator_bb.bollinger_lband()
+    data['bb_m'] = indicator_bb.bollinger_mavg()
+    fig_bb = go.Figure()
+    fig_bb.add_trace(go.Scatter(x=data.index, y=data['Close'], name='Close Price', line=dict(color='lightblue', width=1)))
+    fig_bb.add_trace(go.Scatter(x=data.index, y=data['bb_h'], name='Upper Band', line=dict(color='red', dash='dash')))
+    fig_bb.add_trace(go.Scatter(x=data.index, y=data['bb_l'], name='Lower Band', line=dict(color='green', dash='dash')))
+    fig_bb.add_trace(go.Scatter(x=data.index, y=data['bb_m'], name='Middle Band (SMA20)', line=dict(color='orange', dash='dash')))
+    fig_bb.update_layout(title="Bollinger Bands", height=400, yaxis_title="Price (INR)")
+    st.plotly_chart(fig_bb, use_container_width=True)
+    st.info("Prices moving outside the bands can signal overbought/oversold conditions. A 'squeeze' (bands coming together) can signal upcoming volatility.")
+
+    # MACD
+    st.subheader("Moving Average Convergence Divergence (MACD)")
+    macd = ta.trend.MACD(close=data['Close'])
+    data['macd'] = macd.macd()
+    data['macd_signal'] = macd.macd_signal()
+    data['macd_diff'] = macd.macd_diff()
+    fig_macd = go.Figure()
+    fig_macd.add_trace(go.Scatter(x=data.index, y=data['macd'], name='MACD Line', line_color='blue'))
+    fig_macd.add_trace(go.Scatter(x=data.index, y=data['macd_signal'], name='Signal Line', line_color='orange'))
+    fig_macd.add_trace(go.Bar(x=data.index, y=data['macd_diff'], name='Histogram', marker_color='grey'))
+    fig_macd.update_layout(title="MACD", height=300, yaxis_title="Value")
+    st.plotly_chart(fig_macd, use_container_width=True)
+    st.info("A bullish signal occurs when the MACD line crosses above the Signal line. A bearish signal is the opposite.")
 
 # --- Tab 3: Pattern Recognition ---
 with tab3:
-    st.subheader("📈 Pattern Recognition (Double Top)")
+    st.header("Chart Pattern Recognition")
+    st.info("This tool automatically detects potential reversal patterns. These are suggestions and not financial advice.")
+    
+    patterns = find_patterns(data, order=10, K=5) # Use a wider window (order) for better detection
+    
+    fig_patterns = go.Figure()
+    fig_patterns.add_trace(go.Candlestick(
+        x=data.index, open=data['Open'], high=data['High'], low=data['Low'], close=data['Close'], name='Price'
+    ))
 
-    def detect_double_top(prices, window=5):
-        max_idx = argrelextrema(prices.values, np.greater, order=window)[0]
-        return prices.iloc[max_idx]
+    # Plot Double Tops
+    for dt in patterns['double_top']:
+        fig_patterns.add_trace(go.Scatter(
+            x=dt, y=data['High'].loc[list(dt)], mode='markers', marker=dict(symbol='triangle-down', color='red', size=12), name='Double Top'
+        ))
+    
+    # Plot Double Bottoms
+    for db in patterns['double_bottom']:
+        fig_patterns.add_trace(go.Scatter(
+            x=db, y=data['Low'].loc[list(db)], mode='markers', marker=dict(symbol='triangle-up', color='green', size=12), name='Double Bottom'
+        ))
 
-    recent = data[-30:]
-    double_tops = detect_double_top(recent['Close'])
+    # Plot Head and Shoulders
+    for hs in patterns['head_shoulders']:
+        fig_patterns.add_trace(go.Scatter(
+            x=hs, y=data['High'].loc[list(hs)], mode='markers', marker=dict(symbol='diamond', color='purple', size=12), name='Head & Shoulders'
+        ))
 
-    fig_pattern = go.Figure()
-    fig_pattern.add_trace(go.Scatter(x=recent.index, y=recent['Close'], name="Close Price"))
-    fig_pattern.add_trace(go.Scatter(x=double_tops.index, y=double_tops.values,
-                                     name="Double Top", mode='markers', marker=dict(color='red')))
-    fig_pattern.update_layout(title="Double Top Pattern Detection (30 Days)", height=400)
-    st.plotly_chart(fig_pattern, use_container_width=True)
+    fig_patterns.update_layout(title="Detected Chart Patterns", height=500, xaxis_rangeslider_visible=False)
+    st.plotly_chart(fig_patterns, use_container_width=True)
 
-    if not double_tops.empty:
-        st.warning("⚠️ Double Top pattern may indicate a trend reversal.")
+    if patterns['double_top']:
+        st.warning(f"**Double Top Detected:** Found {len(patterns['double_top'])} potential Double Top pattern(s). This is often a bearish reversal signal.")
+    if patterns['double_bottom']:
+        st.success(f"**Double Bottom Detected:** Found {len(patterns['double_bottom'])} potential Double Bottom pattern(s). This is often a bullish reversal signal.")
+    if patterns['head_shoulders']:
+        st.warning(f"**Head and Shoulders Detected:** Found {len(patterns['head_shoulders'])} potential Head and Shoulders pattern(s). This is a bearish reversal pattern.")
+    
+    if not any(patterns.values()):
+        st.info("No significant chart patterns were detected in the selected time frame.")
+
+# --- Tab 4: NIFTY 50 Overview ---
+with tab4:
+    st.header("NIFTY 50 Index Performance")
+    st.info("Comparing the stock's performance against the broader market index (^NSEI).")
+
+    nifty_data, nifty_error = fetch_data('^NSEI', start_date, end_date)
+
+    if nifty_error:
+        st.error(nifty_error)
+    else:
+        # Normalize data to compare performance
+        normalized_stock = (data['Close'] / data['Close'].iloc[0]) * 100
+        normalized_nifty = (nifty_data['Close'] / nifty_data['Close'].iloc[0]) * 100
+
+        fig_compare = go.Figure()
+        fig_compare.add_trace(go.Scatter(x=normalized_stock.index, y=normalized_stock, name=selected_stock_name, line=dict(color='cyan')))
+        fig_compare.add_trace(go.Scatter(x=normalized_nifty.index, y=normalized_nifty, name='NIFTY 50 Index', line=dict(color='orange')))
+        
+        fig_compare.update_layout(
+            title=f"Performance Comparison: {selected_stock_name} vs. NIFTY 50",
+            yaxis_title="Normalized Performance (Base 100)",
+            height=450
+        )
+        st.plotly_chart(fig_compare, use_container_width=True)
+        
+        # Performance Metrics
+        stock_return = (normalized_stock.iloc[-1] - 100)
+        nifty_return = (normalized_nifty.iloc[-1] - 100)
+
+        st.subheader("Performance in Selected Period")
+        col1, col2 = st.columns(2)
+        col1.metric(f"{selected_stock_name} Return", f"{stock_return:.2f}%")
+        col2.metric("NIFTY 50 Return", f"{nifty_return:.2f}%")
+
+        if stock_return > nifty_return:
+            st.success(f"**Outperformance:** {selected_stock_name} has outperformed the NIFTY 50 index in this period.")
+        else:
+            st.warning(f"**Underperformance:** {selected_stock_name} has underperformed the NIFTY 50 index in this period.")
